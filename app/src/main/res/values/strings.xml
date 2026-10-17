@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Lyrics Translator</string>
+    <string name="floating_lyrics">Floating lyrics</string>
 </resources>

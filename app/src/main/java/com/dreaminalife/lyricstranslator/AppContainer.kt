@@ -27,6 +27,8 @@ import com.dreaminalife.lyricstranslator.domain.LyricsProvider
 import com.dreaminalife.lyricstranslator.domain.NowPlayingSource
 import com.dreaminalife.lyricstranslator.domain.PlaybackController
 import com.dreaminalife.lyricstranslator.domain.model.Lyrics
+import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsSession
+import com.dreaminalife.lyricstranslator.ui.overlay.FloatingLyricsController
 import kotlinx.coroutines.flow.first
 import java.io.File
 
@@ -74,4 +76,15 @@ class AppContainer(context: Context) {
         JsonFileCache(File(appContext.filesDir, "cache/translations"), TranslatedLyrics.serializer()),
     )
     val translatorFactory = TranslatorFactory(http, modelBodyStore)
+
+    val lyricsSession = LyricsSession(
+        nowPlayingSource = nowPlayingSource,
+        lyricsRepository = lyricsRepository,
+        lyricsLanguage = lyricsLanguage,
+        translationRepository = translationRepository,
+        translatorFactory = translatorFactory,
+        settingsRepository = settingsRepository,
+        secretStore = secretStore,
+    )
+    val floatingLyrics = FloatingLyricsController(appContext)
 }

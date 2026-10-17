@@ -1,8 +1,14 @@
 package com.dreaminalife.lyricstranslator.ui.settings
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -59,6 +65,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dreaminalife.lyricstranslator.appContainer
@@ -68,6 +77,7 @@ import com.dreaminalife.lyricstranslator.domain.model.AppSettings
 import com.dreaminalife.lyricstranslator.domain.model.TARGET_LANGUAGES
 import com.dreaminalife.lyricstranslator.domain.model.TranslatorType
 import com.dreaminalife.lyricstranslator.log.AppLog
+import com.dreaminalife.lyricstranslator.ui.overlay.FloatingLyricsOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -136,6 +146,9 @@ fun SettingsScreen(onBack: () -> Unit, onSpotifyLogin: () -> Unit) {
             }
 
             HorizontalDivider()
+            FloatingLyricsSection(viewModel)
+
+            HorizontalDivider()
             LyricsSourceOrder(viewModel)
 
             HorizontalDivider()
@@ -145,6 +158,80 @@ fun SettingsScreen(onBack: () -> Unit, onSpotifyLogin: () -> Unit) {
             HorizontalDivider()
             DebugLogSection()
         }
+    }
+}
+
+/**
+ * Turning the window on first asks for the permission to draw over other apps (in system settings, checked again on
+ * return), then for notifications, which hold its Lock and Close buttons. It starts even if notifications are denied.
+ */
+@Composable
+private fun FloatingLyricsSection(viewModel: SettingsViewModel) {
+    val context = LocalContext.current
+    val running by viewModel.floatingRunning.collectAsStateWithLifecycle()
+    val locked by viewModel.floatingLocked.collectAsStateWithLifecycle()
+    val settings by viewModel.floatingSettings.collectAsStateWithLifecycle()
+    // Set while the user is in system settings granting the permission to draw over other apps.
+    var pendingEnable by rememberSaveable { mutableStateOf(false) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        viewModel.startFloating()
+    }
+    val startWithNotifications = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            viewModel.startFloating()
+        }
+    }
+    LifecycleResumeEffect(Unit) {
+        if (pendingEnable) {
+            pendingEnable = false
+            if (android.provider.Settings.canDrawOverlays(context)) startWithNotifications()
+        }
+        onPauseOrDispose { }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle("Floating lyrics")
+        ListItem(
+            headlineContent = { Text("Show floating lyrics") },
+            supportingContent = { Text("Shows the line playing now over other apps. Drag it to move it, or drag its corner to change its width.") },
+            trailingContent = {
+                Switch(checked = running, onCheckedChange = { on ->
+                    when {
+                        !on -> viewModel.stopFloating()
+                        android.provider.Settings.canDrawOverlays(context) -> startWithNotifications()
+                        else -> {
+                            pendingEnable = true
+                            context.startActivity(
+                                Intent(
+                                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                    "package:${context.packageName}".toUri(),
+                                ),
+                            )
+                        }
+                    }
+                })
+            },
+        )
+        if (running) {
+            ListItem(
+                headlineContent = { Text("Lock") },
+                supportingContent = {
+                    Text("Touches go through the lyrics to the app underneath. You can also lock and unlock them from their notification.")
+                },
+                trailingContent = { Switch(checked = locked, onCheckedChange = viewModel::setFloatingLocked) },
+            )
+        }
+        Text(
+            "Also in the floating window: tap its ⚙ button. It hides while this app is open and while music is paused.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        FloatingLyricsOptions(settings, viewModel::updateFloating, Modifier.padding(horizontal = 16.dp))
     }
 }
 

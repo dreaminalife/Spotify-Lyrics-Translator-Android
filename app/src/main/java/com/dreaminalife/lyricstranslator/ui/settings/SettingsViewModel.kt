@@ -13,9 +13,11 @@ import com.dreaminalife.lyricstranslator.data.translation.openrouter.ModelBodySt
 import com.dreaminalife.lyricstranslator.data.translation.openrouter.ModelInfo
 import com.dreaminalife.lyricstranslator.data.translation.openrouter.OpenRouterModelCatalog
 import com.dreaminalife.lyricstranslator.domain.model.AppSettings
+import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsSettings
 import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.TranslatorType
 import com.dreaminalife.lyricstranslator.log.AppLog
+import com.dreaminalife.lyricstranslator.ui.overlay.FloatingLyricsController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -45,6 +47,7 @@ class SettingsViewModel(
     private val modelBodyStore: ModelBodyStore,
     private val modelCatalog: OpenRouterModelCatalog,
     private val defaultSourceOrder: List<LyricsSource>,
+    private val floatingLyrics: FloatingLyricsController,
 ) : ViewModel() {
 
     /** Null until loaded. */
@@ -66,6 +69,13 @@ class SettingsViewModel(
     val hasSpDc: StateFlow<Boolean> = secretStore.spDc
         .map { !it.isNullOrBlank() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val floatingSettings: StateFlow<FloatingLyricsSettings> = settingsRepository.floatingLyrics
+        .stateIn(viewModelScope, SharingStarted.Eagerly, FloatingLyricsSettings())
+
+    val floatingRunning: StateFlow<Boolean> = floatingLyrics.running
+
+    val floatingLocked: StateFlow<Boolean> = floatingLyrics.locked
 
     private val _models = MutableStateFlow(ModelListState())
     val models: StateFlow<ModelListState> = _models.asStateFlow()
@@ -99,7 +109,18 @@ class SettingsViewModel(
 
     fun resetSourceOrder() = launch { settingsRepository.resetSourceOrder() }
 
-    fun saveApiKey(key: String) = launch { secretStore.setOpenRouterKey(key) }
+    fun startFloating() = floatingLyrics.start()
+
+    fun stopFloating() = floatingLyrics.stop()
+
+    fun setFloatingLocked(locked: Boolean) {
+        floatingLyrics.locked.value = locked
+    }
+
+    fun updateFloating(transform: (FloatingLyricsSettings) -> FloatingLyricsSettings) =
+        launch { settingsRepository.updateFloatingLyrics(transform) }
+
+    fun saveApiKey(key: String) =launch { secretStore.setOpenRouterKey(key) }
 
     fun removeApiKey() = launch { secretStore.setOpenRouterKey(null) }
 
@@ -168,6 +189,7 @@ class SettingsViewModel(
                     modelBodyStore = container.modelBodyStore,
                     modelCatalog = container.modelCatalog,
                     defaultSourceOrder = container.lyricsRepository.defaultOrder,
+                    floatingLyrics = container.floatingLyrics,
                 )
             }
         }
