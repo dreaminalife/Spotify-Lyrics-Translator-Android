@@ -2,6 +2,7 @@ package com.dreaminalife.lyricstranslator.data.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -28,6 +29,7 @@ class SettingsRepository(context: Context) {
             targetLanguage = prefs[TARGET_LANGUAGE] ?: defaults.targetLanguage,
             openRouterModel = prefs[MODEL] ?: defaults.openRouterModel,
             promptTemplate = prefs[PROMPT] ?: defaults.promptTemplate,
+            openRouterAutoTranslate = prefs[AUTO_TRANSLATE] ?: defaults.openRouterAutoTranslate,
         )
     }.distinctUntilChanged()
 
@@ -72,6 +74,11 @@ class SettingsRepository(context: Context) {
     suspend fun setOpenRouterModel(model: String) = set(MODEL, model)
     suspend fun setPromptTemplate(template: String) = set(PROMPT, template)
 
+    suspend fun setOpenRouterAutoTranslate(enabled: Boolean) {
+        dataStore.edit { it[AUTO_TRANSLATE] = enabled }
+        AppLog.i("Settings", "${AUTO_TRANSLATE.name} = $enabled")
+    }
+
     private suspend fun set(key: Preferences.Key<String>, value: String) {
         dataStore.edit { it[key] = value }
         AppLog.i("Settings", "${key.name} = ${if (key == PROMPT) "<${value.length} chars>\n$value" else value}")
@@ -86,6 +93,7 @@ class SettingsRepository(context: Context) {
         val TARGET_LANGUAGE = stringPreferencesKey("target_language")
         val MODEL = stringPreferencesKey("openrouter_model")
         val PROMPT = stringPreferencesKey("prompt_template")
+        val AUTO_TRANSLATE = booleanPreferencesKey("openrouter_auto_translate")
         val SOURCE_ORDER = stringPreferencesKey("lyrics_source_order")
         val PINNED_SOURCE = stringPreferencesKey("pinned_lyrics_source")
     }

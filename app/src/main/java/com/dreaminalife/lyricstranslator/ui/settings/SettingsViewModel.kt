@@ -141,7 +141,9 @@ class SettingsViewModel(
 
     fun resetModelBody() = launch { storeModelBody(ModelBodyStore.DEFAULT_BODY) }
 
-    fun savePrompt(template: String) = launch { settingsRepository.setPromptTemplate(template) }
+    fun setAutoTranslate(enabled: Boolean) = launch { settingsRepository.setOpenRouterAutoTranslate(enabled) }
+
+    fun savePrompt(template: String)= launch { settingsRepository.setPromptTemplate(template) }
 
     fun resetPrompt() = launch { settingsRepository.setPromptTemplate(AppSettings.DEFAULT_PROMPT_TEMPLATE) }
 

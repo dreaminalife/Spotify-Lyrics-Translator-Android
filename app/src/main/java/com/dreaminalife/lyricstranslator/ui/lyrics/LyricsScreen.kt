@@ -180,6 +180,8 @@ private fun StatusRow(state: LyricsUiState, onOpenSettings: () -> Unit, onSelect
                 // "Chinese", not "Chinese (Simplified)": the lyrics may be in either script.
                 Tag("Already in ${language?.name?.substringBefore(" (") ?: translation.targetLanguage}")
             }
+            // The source's own translation may still be on screen.
+            TranslationState.NotRequested -> if (state.translationLines == null) Tag("Not translated")
             TranslationState.None -> Unit
         }
         if (!lyrics.synced) {

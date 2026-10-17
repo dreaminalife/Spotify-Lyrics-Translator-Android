@@ -19,6 +19,7 @@ import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.LyricsSourcePreference
 import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
 import com.dreaminalife.lyricstranslator.domain.model.Track
+import com.dreaminalife.lyricstranslator.domain.model.TranslatorType
 import com.dreaminalife.lyricstranslator.log.AppLog
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -54,6 +55,13 @@ class LyricsViewModel(
     val nowPlaying: StateFlow<NowPlaying?> = nowPlayingSource.nowPlaying
 
     private val refreshCount = MutableStateFlow(0)
+
+    /**
+     * The last track refreshed, which is translated even with OpenRouter auto-translate off.
+     * Read, not observed: the lyrics reload that refresh starts re-runs the translation, so no request goes out for the
+     * lyrics being replaced.
+     */
+    private var forcedTrackKey: String? = null
 
     private val lyricsState: StateFlow<LyricsLoad> = combine(
         nowPlayingSource.nowPlaying.map { it?.track }.distinctUntilChanged { old, new -> old?.key == new?.key },
@@ -102,13 +110,14 @@ class LyricsViewModel(
 
     /**
      * Drops the cached lyrics and translations of the source on screen for the current track and looks it up again.
-     * Other sources' cached lyrics and translations stay.
+     * Other sources' cached lyrics and translations stay. The track is translated even with auto-translate off.
      */
     fun refresh() {
         val (track, _, content) = lyricsState.value
         if (track == null) return
         val source = (content as? LyricsContent.Loaded)?.lyrics?.source
         AppLog.i(TAG, "Refresh requested for '${track.title}' (${source?.displayName ?: "no lyrics shown"})")
+        forcedTrackKey = track.key
         viewModelScope.launch {
             // With no lyrics shown, nothing is cached for the sources tried first, so a new lookup is enough.
             if (source != null) {
@@ -175,6 +184,13 @@ class LyricsViewModel(
         }
         translationRepository.cached(track, content.lyrics, translator, settings.targetLanguage)?.let {
             emit(TranslationState.Done(track.key, content.lyrics.source, it))
+            return@flow
+        }
+        if (settings.translatorType == TranslatorType.OPENROUTER && !settings.openRouterAutoTranslate &&
+            track.key != forcedTrackKey
+        ) {
+            AppLog.i(TAG, "Translation not requested: OpenRouter auto-translate is off for '${track.title}'")
+            emit(TranslationState.NotRequested)
             return@flow
         }
         emit(TranslationState.Translating)

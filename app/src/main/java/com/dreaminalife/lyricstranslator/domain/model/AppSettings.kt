@@ -11,6 +11,8 @@ data class AppSettings(
     val targetLanguage: String = "en",
     val openRouterModel: String = DEFAULT_OPENROUTER_MODEL,
     val promptTemplate: String = DEFAULT_PROMPT_TEMPLATE,
+    /** Off: songs aren't sent to OpenRouter unless refreshed on the lyrics screen; cached translations still show. */
+    val openRouterAutoTranslate: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.1-terminus"

@@ -40,6 +40,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -117,6 +118,18 @@ fun SettingsScreen(onBack: () -> Unit, onSpotifyLogin: () -> Unit) {
                 HorizontalDivider()
                 SectionTitle("OpenRouter")
                 ApiKeyField(viewModel)
+                ListItem(
+                    headlineContent = { Text("Translate every song") },
+                    supportingContent = {
+                        Text(
+                            "When off, a song is sent to OpenRouter only when you tap Translate or refresh (⟳) on the lyrics screen. " +
+                                "Translations already saved, or included with the lyrics, still show."
+                        )
+                    },
+                    trailingContent = {
+                        Switch(checked = loaded.openRouterAutoTranslate, onCheckedChange = viewModel::setAutoTranslate)
+                    },
+                )
                 ModelField(loaded.openRouterModel, viewModel)
                 ModelBodyField(loaded.openRouterModel, viewModel)
                 PromptField(loaded.promptTemplate, viewModel)

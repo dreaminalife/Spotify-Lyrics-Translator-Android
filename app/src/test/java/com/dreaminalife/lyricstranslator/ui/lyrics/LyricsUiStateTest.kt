@@ -18,8 +18,14 @@ class LyricsUiStateTest {
     private val done = TranslatedLyrics(listOf("A", "B"), "T", "Fake")
 
     @Test
-    fun `provided lines show while translating, after a failure, and without a key`() {
-        listOf(TranslationState.Translating, TranslationState.Failed("x"), TranslationState.MissingKey, TranslationState.None)
+    fun `provided lines show while translating, after a failure, without a key, and with auto-translate off`() {
+        listOf(
+            TranslationState.Translating,
+            TranslationState.Failed("x"),
+            TranslationState.MissingKey,
+            TranslationState.NotRequested,
+            TranslationState.None,
+        )
             .forEach { assertEquals(provided, LyricsUiState(track, content, translation = it, providedTranslation = provided).translationLines) }
     }
 
