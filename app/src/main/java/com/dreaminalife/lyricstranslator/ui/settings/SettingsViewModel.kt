@@ -13,6 +13,7 @@ import com.dreaminalife.lyricstranslator.data.translation.openrouter.ModelBodySt
 import com.dreaminalife.lyricstranslator.data.translation.openrouter.ModelInfo
 import com.dreaminalife.lyricstranslator.data.translation.openrouter.OpenRouterModelCatalog
 import com.dreaminalife.lyricstranslator.domain.model.AppSettings
+import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.TranslatorType
 import com.dreaminalife.lyricstranslator.log.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,15 +36,27 @@ data class ModelListState(
     val error: String? = null,
 )
 
+/** The lyrics source order from Settings, and the source picked on the lyrics screen, if any. */
+data class SourceOrderUi(val order: List<LyricsSource>, val isDefault: Boolean, val pinned: LyricsSource?)
+
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val secretStore: SecretStore,
     private val modelBodyStore: ModelBodyStore,
     private val modelCatalog: OpenRouterModelCatalog,
+    private val defaultSourceOrder: List<LyricsSource>,
 ) : ViewModel() {
 
     /** Null until loaded. */
     val settings: StateFlow<AppSettings?> = settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Null until loaded. */
+    val sourceOrder: StateFlow<SourceOrderUi?> = settingsRepository.lyricsSources
+        .map { preference ->
+            val order = preference.copy(pinned = null).resolve(defaultSourceOrder)
+            SourceOrderUi(order, isDefault = order == defaultSourceOrder, pinned = preference.pinned)
+        }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val hasApiKey: StateFlow<Boolean> = secretStore.openRouterKey
@@ -80,6 +93,11 @@ class SettingsViewModel(
     fun setTranslator(type: TranslatorType) = launch { settingsRepository.setTranslatorType(type) }
 
     fun setTargetLanguage(code: String) = launch { settingsRepository.setTargetLanguage(code) }
+
+    fun moveSource(source: LyricsSource, offset: Int) =
+        launch { settingsRepository.moveSource(source, offset, defaultSourceOrder) }
+
+    fun resetSourceOrder() = launch { settingsRepository.resetSourceOrder() }
 
     fun saveApiKey(key: String) = launch { secretStore.setOpenRouterKey(key) }
 
@@ -147,6 +165,7 @@ class SettingsViewModel(
                     secretStore = container.secretStore,
                     modelBodyStore = container.modelBodyStore,
                     modelCatalog = container.modelCatalog,
+                    defaultSourceOrder = container.lyricsRepository.defaultOrder,
                 )
             }
         }

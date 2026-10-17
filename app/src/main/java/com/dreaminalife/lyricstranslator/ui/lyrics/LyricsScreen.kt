@@ -19,9 +19,12 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dreaminalife.lyricstranslator.appContainer
 import com.dreaminalife.lyricstranslator.domain.model.Lyrics
+import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
 import kotlinx.coroutines.delay
 
@@ -117,7 +121,7 @@ fun LyricsScreen(onOpenSettings: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            StatusRow(state, onOpenSettings)
+            StatusRow(state, onOpenSettings, onSelectSource = viewModel::selectSource)
             Box(Modifier.fillMaxWidth().weight(1f)) {
                 when (val content = state.content) {
                     LyricsContent.NothingPlaying -> Message("Play a song in Spotify and its lyrics will show up here.")
@@ -139,14 +143,25 @@ fun LyricsScreen(onOpenSettings: () -> Unit) {
 }
 
 @Composable
-private fun StatusRow(state: LyricsUiState, onOpenSettings: () -> Unit) {
-    val lyrics = (state.content as? LyricsContent.Loaded)?.lyrics ?: return
+private fun StatusRow(state: LyricsUiState, onOpenSettings: () -> Unit, onSelectSource: (LyricsSource) -> Unit) {
+    if (state.content == LyricsContent.NothingPlaying) return
+    val lyrics = (state.content as? LyricsContent.Loaded)?.lyrics
     FlowRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Tag(lyrics.source.displayName)
+        // Also shown while loading or without lyrics, so a source that is slow or has nothing can be skipped.
+        SourcePicker(
+            label = lyrics?.source?.displayName ?: "Lyrics source",
+            sources = state.sourceOrder,
+            first = state.pinnedSource ?: state.sourceOrder.firstOrNull(),
+            onSelect = onSelectSource,
+        )
+        if (lyrics == null) return@FlowRow
+        state.pinnedSource?.takeIf { it != lyrics.source }?.let {
+            Tag("Couldn't get lyrics from ${it.displayName}", color = MaterialTheme.colorScheme.tertiaryContainer)
+        }
         when (val translation = state.translation) {
             TranslationState.Translating -> Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
@@ -163,6 +178,32 @@ private fun StatusRow(state: LyricsUiState, onOpenSettings: () -> Unit) {
         }
         if (!lyrics.synced) {
             Tag("Not time-synced", color = MaterialTheme.colorScheme.tertiaryContainer)
+        }
+    }
+}
+
+/** Shows [label] (the source of the lyrics on screen); tapping it picks the source to try first for every song. */
+@Composable
+private fun SourcePicker(
+    label: String,
+    sources: List<LyricsSource>,
+    first: LyricsSource?,
+    onSelect: (LyricsSource) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Tag("$label ▾", onClick = { open = true })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            sources.forEach { source ->
+                DropdownMenuItem(
+                    text = { Text(source.displayName) },
+                    trailingIcon = if (source == first) ({ Icon(Icons.Default.Check, contentDescription = "Tried first") }) else null,
+                    onClick = {
+                        open = false
+                        if (source != first) onSelect(source)
+                    },
+                )
+            }
         }
     }
 }

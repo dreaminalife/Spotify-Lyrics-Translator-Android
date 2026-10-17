@@ -23,6 +23,19 @@ data class AppSettings(
     }
 }
 
+/**
+ * The order lyrics sources are tried in. [order] is the user's order from Settings (empty for the default);
+ * [pinned] is a source picked on the lyrics screen, tried before all others.
+ */
+data class LyricsSourcePreference(
+    val order: List<LyricsSource> = emptyList(),
+    val pinned: LyricsSource? = null,
+) {
+    /** [pinned], then [order], then the rest of [defaultOrder]; only sources in [defaultOrder], each once. */
+    fun resolve(defaultOrder: List<LyricsSource>): List<LyricsSource> =
+        (listOfNotNull(pinned) + order + defaultOrder).distinct().filter { it in defaultOrder }
+}
+
 data class Language(val code: String, val name: String)
 
 val TARGET_LANGUAGES = listOf(

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ClaudeCodeEditorTabs">
-    <option name="activeSessionId" value="9439461c-16af-442c-9f54-13ae8a3e7dbe" />
+    <option name="activeSessionId" value="a0f90fd1-feaa-45fb-9e25-a1a38f083244" />
     <option name="openSessionIds">
       <list>
         <option value="dc40e394-4d8e-43f6-b480-a63b587d9784" />
@@ -12,6 +12,7 @@
         <option value="7d571ab4-25d9-4bf7-a381-88fdfcb1e7a4" />
         <option value="cf575b3e-abdc-43ae-8e66-0b1ee2e4347f" />
         <option value="9439461c-16af-442c-9f54-13ae8a3e7dbe" />
+        <option value="a0f90fd1-feaa-45fb-9e25-a1a38f083244" />
       </list>
     </option>
     <option name="sessionPaths">
@@ -21,6 +22,7 @@
         <entry key="630976d7-8804-400e-bbda-c498c768bfb2" value="/sessions/28951eac-fd1d-4792-a195-d61f2bf772dd" />
         <entry key="7d571ab4-25d9-4bf7-a381-88fdfcb1e7a4" value="/sessions/daf4cf9e-e5a7-48b7-8009-a732b510d340" />
         <entry key="9439461c-16af-442c-9f54-13ae8a3e7dbe" value="/sessions/20d71eda-6c57-4c08-8668-46086796166b" />
+        <entry key="a0f90fd1-feaa-45fb-9e25-a1a38f083244" value="/sessions/new" />
         <entry key="bf1c90d2-26da-4c0d-b188-738af0177e22" value="/sessions/81e3d079-0667-4a63-bc78-393326615b54" />
         <entry key="cf575b3e-abdc-43ae-8e66-0b1ee2e4347f" value="/sessions/new" />
         <entry key="dc40e394-4d8e-43f6-b480-a63b587d9784" value="/sessions/5530488b-11dd-49c9-8206-07d93a2ccbd6" />
@@ -34,6 +36,7 @@
         <entry key="630976d7-8804-400e-bbda-c498c768bfb2" value="how do i set up subagent model" />
         <entry key="7d571ab4-25d9-4bf7-a381-88fdfcb1e7a4" value="so i have lots of uncommited changes. which ones a" />
         <entry key="9439461c-16af-442c-9f54-13ae8a3e7dbe" value="here is an issue: Those three services do have 乾杯." />
+        <entry key="a0f90fd1-feaa-45fb-9e25-a1a38f083244" value="Claude Code" />
         <entry key="bf1c90d2-26da-4c0d-b188-738af0177e22" value="any other free lyrics sources that we can integrat" />
         <entry key="cf575b3e-abdc-43ae-8e66-0b1ee2e4347f" value="Claude Code" />
         <entry key="dc40e394-4d8e-43f6-b480-a63b587d9784" value="I want you to create an android version of a repo" />

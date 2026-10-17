@@ -89,6 +89,29 @@ class TranslationRepositoryTest {
     }
 
     @Test
+    fun `a translation of one source's lyrics is not used for another source's lyrics with as many lines`() = runTest {
+        val repository = repository()
+        val translator = FakeTranslator()
+        repository.translate(track, lyrics.copy(source = LyricsSource.NETEASE), translator, "en")
+
+        assertNull(repository.cached(track, lyrics.copy(source = LyricsSource.QQ_MUSIC), translator, "en"))
+    }
+
+    @Test
+    fun `clearing a source keeps the translations of other sources' lyrics`() = runTest {
+        val repository = repository()
+        val translator = FakeTranslator()
+        val netEase = lyrics.copy(source = LyricsSource.NETEASE)
+        val qq = lyrics.copy(source = LyricsSource.QQ_MUSIC)
+        repository.translate(track, netEase, translator, "en")
+        repository.translate(track, qq, translator, "en")
+        repository.clear(track, LyricsSource.NETEASE)
+
+        assertNull(repository.cached(track, netEase, translator, "en"))
+        assertEquals(listOf("<a>", "", "<b>"), repository.cached(track, qq, translator, "en")?.lines)
+    }
+
+    @Test
     fun `when the provided translation covers every line only the title is sent`() = runTest {
         val translator = FakeTranslator()
         val withTranslation = lyrics.copy(translation = ProvidedTranslation("zh-CN", listOf("甲", "", "乙")))

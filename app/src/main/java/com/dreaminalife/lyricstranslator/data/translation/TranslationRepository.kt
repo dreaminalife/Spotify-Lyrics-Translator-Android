@@ -3,18 +3,19 @@ package com.dreaminalife.lyricstranslator.data.translation
 import com.dreaminalife.lyricstranslator.data.cache.JsonFileCache
 import com.dreaminalife.lyricstranslator.domain.Translator
 import com.dreaminalife.lyricstranslator.domain.model.Lyrics
+import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.Track
 import com.dreaminalife.lyricstranslator.log.AppLog
 
 /**
- * Translates the song title and lyrics in one request, caching per (track, translator, target language).
+ * Translates the song title and lyrics in one request, caching per (track, lyrics source, translator, target language).
  * Failures are thrown and never cached.
  */
 class TranslationRepository(private val cache: JsonFileCache<TranslatedLyrics>) {
 
     /** The cached translation, if it still matches [lyrics] line for line. */
     suspend fun cached(track: Track, lyrics: Lyrics, translator: Translator, targetLanguage: String): TranslatedLyrics? =
-        cache.get(track.key, cacheKey(translator, targetLanguage))
+        cache.get(group(track, lyrics.source), cacheKey(translator, targetLanguage))
             // Lyrics and translations are trimmed separately; refetched lyrics may differ from what was translated.
             ?.let { cached ->
                 if (cached.lines.size == lyrics.lines.size) {
@@ -47,13 +48,17 @@ class TranslationRepository(private val cache: JsonFileCache<TranslatedLyrics>) 
         val name = if (provided != null) "${lyrics.source.displayName} + ${translator.displayName}" else translator.displayName
 
         return TranslatedLyrics(lines, translated.first(), name)
-            .also { cache.put(track.key, cacheKey(translator, targetLanguage), it) }
+            .also { cache.put(group(track, lyrics.source), cacheKey(translator, targetLanguage), it) }
     }
 
-    suspend fun clear(track: Track) {
-        AppLog.i(TAG, "Clearing cached translations for '${track.title}'")
-        cache.removeGroup(track.key)
+    /** Drops the cached translations of [source]'s lyrics for [track]; other sources' stay. */
+    suspend fun clear(track: Track, source: LyricsSource) {
+        AppLog.i(TAG, "Clearing cached translations of ${source.displayName} lyrics for '${track.title}'")
+        cache.removeGroup(group(track, source))
     }
+
+    // Grouped by source: another source's lyrics can have the same line count but different lines.
+    private fun group(track: Track, source: LyricsSource) = "${track.key}|${source.name}"
 
     private fun cacheKey(translator: Translator, targetLanguage: String) = "${translator.id}|$targetLanguage"
 

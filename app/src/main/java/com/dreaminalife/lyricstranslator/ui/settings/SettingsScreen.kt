@@ -20,6 +20,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -119,6 +121,9 @@ fun SettingsScreen(onBack: () -> Unit, onSpotifyLogin: () -> Unit) {
                 ModelBodyField(loaded.openRouterModel, viewModel)
                 PromptField(loaded.promptTemplate, viewModel)
             }
+
+            HorizontalDivider()
+            LyricsSourceOrder(viewModel)
 
             HorizontalDivider()
             SectionTitle("Spotify lyrics")
@@ -233,6 +238,39 @@ private fun ApiKeyField(viewModel: SettingsViewModel) {
                 TextButton(onClick = viewModel::removeApiKey) { Text("Remove key") }
             }
         }
+    }
+}
+
+@Composable
+private fun LyricsSourceOrder(viewModel: SettingsViewModel) {
+    val state by viewModel.sourceOrder.collectAsStateWithLifecycle()
+    val sources = state ?: return
+    Column {
+        SectionTitle("Lyrics sources")
+        Text(
+            "Tried top to bottom; the first with lyrics wins.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+        )
+        sources.order.forEachIndexed { index, source ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${index + 1}. ${source.displayName}", modifier = Modifier.weight(1f))
+                IconButton(onClick = { viewModel.moveSource(source, -1) }, enabled = index > 0) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move ${source.displayName} up")
+                }
+                IconButton(onClick = { viewModel.moveSource(source, 1) }, enabled = index < sources.order.lastIndex) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move ${source.displayName} down")
+                }
+            }
+        }
+        sources.pinned?.let {
+            Text(
+                "${it.displayName} is tried first for now (picked on the lyrics screen). Changing the order here clears that.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = viewModel::resetSourceOrder, enabled = !sources.isDefault) { Text("Reset to default") }
     }
 }
 

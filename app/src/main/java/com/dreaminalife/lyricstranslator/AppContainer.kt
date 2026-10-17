@@ -42,8 +42,8 @@ class AppContainer(context: Context) {
     val nowPlayingSource: NowPlayingSource = mediaSessions
     val playbackController: PlaybackController = mediaSessions
 
-    // Tried in order; the first provider with lyrics wins. The Chinese services go first for their timed lyrics and
-    // Chinese translations; QQ Music and Kugou fill NetEase's gaps.
+    // The default order (users can change it in Settings); the first provider with lyrics wins. The Chinese services
+    // go first for their timed lyrics and Chinese translations; QQ Music and Kugou fill NetEase's gaps.
     private val lyricsProviders: List<LyricsProvider> = listOf(
         NetEaseProvider(http),
         QqMusicProvider(http),

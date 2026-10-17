@@ -19,7 +19,7 @@ import java.security.MessageDigest
 class JsonFileCache<T>(
     private val directory: File,
     private val serializer: KSerializer<T>,
-    private val maxEntries: Int = 500,
+    private val maxEntries: Int = 10_000,
 ) {
     private val mutex = Mutex()
 
@@ -57,7 +57,8 @@ class JsonFileCache<T>(
         if (files.size <= maxEntries) return
         val excess = files.size - maxEntries
         AppLog.d("Cache", "${directory.name}: ${files.size} entries, removing the $excess least recently used")
-        files.sortedBy { it.lastModified() }.take(excess).forEach { it.delete() }
+        // Each file's time is read once: sortedBy would read it on every comparison, slow with thousands of files.
+        files.map { it to it.lastModified() }.sortedBy { it.second }.take(excess).forEach { it.first.delete() }
     }
 
     private fun fileFor(group: String, key: String) = File(directory, "${hash(group)}_${hash(key)}.json")

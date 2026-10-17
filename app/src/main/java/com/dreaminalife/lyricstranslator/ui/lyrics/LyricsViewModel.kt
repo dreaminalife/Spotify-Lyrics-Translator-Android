@@ -14,6 +14,8 @@ import com.dreaminalife.lyricstranslator.data.translation.TranslatorFactory
 import com.dreaminalife.lyricstranslator.domain.NowPlayingSource
 import com.dreaminalife.lyricstranslator.domain.PlaybackController
 import com.dreaminalife.lyricstranslator.domain.model.AppSettings
+import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
+import com.dreaminalife.lyricstranslator.domain.model.LyricsSourcePreference
 import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
 import com.dreaminalife.lyricstranslator.domain.model.Track
 import com.dreaminalife.lyricstranslator.log.AppLog
@@ -43,7 +45,7 @@ class LyricsViewModel(
     private val lyricsRepository: LyricsRepository,
     private val translationRepository: TranslationRepository,
     private val translatorFactory: TranslatorFactory,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     secretStore: SecretStore,
 ) : ViewModel(), PlaybackController by playbackController {
 
@@ -51,15 +53,21 @@ class LyricsViewModel(
 
     private val refreshCount = MutableStateFlow(0)
 
-    private val lyricsState: StateFlow<Pair<Track?, LyricsContent>> = combine(
+    private val lyricsState: StateFlow<LyricsLoad> = combine(
         nowPlayingSource.nowPlaying.map { it?.track }.distinctUntilChanged { old, new -> old?.key == new?.key },
         refreshCount,
-    ) { track, _ -> track }
-        .flatMapLatest(::loadLyrics)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null to LyricsContent.NothingPlaying)
+        settingsRepository.lyricsSources,
+    ) { track, _, preference -> track to preference }
+        .flatMapLatest { (track, preference) -> loadLyrics(track, preference) }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            LyricsLoad(null, LyricsSourcePreference(), LyricsContent.NothingPlaying),
+        )
 
     private val translationState: StateFlow<TranslationState> = combine(
-        lyricsState,
+        // Not the source preference: picking a source that has nothing for this song leaves the lyrics as they are.
+        lyricsState.map { it.track to it.content }.distinctUntilChanged(),
         settingsRepository.settings,
         secretStore.openRouterKey,
     ) { (track, content), settings, apiKey -> TranslationRequest(track, content, settings, apiKey) }
@@ -70,9 +78,16 @@ class LyricsViewModel(
         lyricsState,
         translationState,
         settingsRepository.settings,
-    ) { (track, content), translation, settings ->
+    ) { (track, preference, content), translation, settings ->
         val provided = (content as? LyricsContent.Loaded)?.lyrics?.providedTranslation(settings.targetLanguage)
-        LyricsUiState(track, content, translation, provided)
+        LyricsUiState(
+            track,
+            content,
+            translation,
+            provided,
+            sourceOrder = preference.copy(pinned = null).resolve(lyricsRepository.defaultOrder),
+            pinnedSource = preference.pinned,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsUiState())
 
     init {
@@ -83,15 +98,31 @@ class LyricsViewModel(
     /** Starts listening if notification access was granted after this ViewModel was created. */
     fun onResume() = nowPlayingSource.start()
 
-    /** Drops cached lyrics and translations for the current track and fetches them again. */
+    /**
+     * Drops the cached lyrics and translations of the source on screen for the current track and looks it up again.
+     * Other sources' cached lyrics and translations stay.
+     */
     fun refresh() {
-        val track = lyricsState.value.first ?: return
-        AppLog.i(TAG, "Refresh requested for '${track.title}'")
+        val (track, _, content) = lyricsState.value
+        if (track == null) return
+        val source = (content as? LyricsContent.Loaded)?.lyrics?.source
+        AppLog.i(TAG, "Refresh requested for '${track.title}' (${source?.displayName ?: "no lyrics shown"})")
         viewModelScope.launch {
-            lyricsRepository.clear(track)
-            translationRepository.clear(track)
+            // With no lyrics shown, nothing is cached for the sources tried first, so a new lookup is enough.
+            if (source != null) {
+                lyricsRepository.clear(track, source)
+                translationRepository.clear(track, source)
+            }
             refreshCount.value++
         }
+    }
+
+    /** Tries [source] first for every song, until another is picked or the order is changed in Settings. */
+    fun selectSource(source: LyricsSource) {
+        // Picking the source that is already first in the Settings order just goes back to that order.
+        val pinned = source.takeIf { it != uiState.value.sourceOrder.firstOrNull() }
+        AppLog.i(TAG, "Source picked: ${source.displayName}${if (pinned == null) " (first in Settings order)" else ""}")
+        viewModelScope.launch { settingsRepository.setPinnedSource(pinned) }
     }
 
     override fun onCleared() {
@@ -99,27 +130,27 @@ class LyricsViewModel(
         nowPlayingSource.stop()
     }
 
-    private fun loadLyrics(track: Track?): Flow<Pair<Track?, LyricsContent>> = flow {
+    private fun loadLyrics(track: Track?, preference: LyricsSourcePreference): Flow<LyricsLoad> = flow {
         if (track == null) {
             AppLog.i(TAG, "Nothing playing")
-            emit(null to LyricsContent.NothingPlaying)
+            emit(LyricsLoad(null, preference, LyricsContent.NothingPlaying))
             return@flow
         }
         AppLog.i(TAG, "Track: '${track.title}' by '${track.artist}'")
-        lyricsRepository.cached(track)?.let {
-            emit(track to LyricsContent.Loaded(it))
+        lyricsRepository.cached(track, preference)?.let {
+            emit(LyricsLoad(track, preference, LyricsContent.Loaded(it)))
             return@flow
         }
-        emit(track to LyricsContent.Loading)
+        emit(LyricsLoad(track, preference, LyricsContent.Loading))
         val content = try {
-            lyricsRepository.get(track)?.let { LyricsContent.Loaded(it) } ?: LyricsContent.NotFound
+            lyricsRepository.get(track, preference)?.let { LyricsContent.Loaded(it) } ?: LyricsContent.NotFound
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             AppLog.e(TAG, "Lyrics failed for '${track.title}'", e)
             LyricsContent.Error("Couldn't load lyrics: ${e.message ?: e.javaClass.simpleName}")
         }
-        emit(track to content)
+        emit(LyricsLoad(track, preference, content))
     }
 
     private fun translate(request: TranslationRequest): Flow<TranslationState> = flow {
@@ -136,13 +167,14 @@ class LyricsViewModel(
             return@flow
         }
         translationRepository.cached(track, content.lyrics, translator, settings.targetLanguage)?.let {
-            emit(TranslationState.Done(track.key, it))
+            emit(TranslationState.Done(track.key, content.lyrics.source, it))
             return@flow
         }
         emit(TranslationState.Translating)
         val result = try {
             TranslationState.Done(
                 track.key,
+                content.lyrics.source,
                 translationRepository.translate(track, content.lyrics, translator, settings.targetLanguage),
             )
         } catch (e: CancellationException) {
@@ -153,6 +185,13 @@ class LyricsViewModel(
         }
         emit(result)
     }
+
+    /** Lyrics for [track], with the [preference] they were loaded with. */
+    private data class LyricsLoad(
+        val track: Track?,
+        val preference: LyricsSourcePreference,
+        val content: LyricsContent,
+    )
 
     private data class TranslationRequest(
         val track: Track?,
