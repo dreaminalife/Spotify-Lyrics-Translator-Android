@@ -56,6 +56,7 @@ import com.dreaminalife.lyricstranslator.appContainer
 import com.dreaminalife.lyricstranslator.domain.model.Lyrics
 import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
+import com.dreaminalife.lyricstranslator.domain.model.TARGET_LANGUAGES
 import kotlinx.coroutines.delay
 
 /** After the user scrolls by hand, auto-scroll waits this long before following the song again (as on desktop). */
@@ -174,6 +175,11 @@ private fun StatusRow(state: LyricsUiState, onOpenSettings: () -> Unit, onSelect
                 onClick = onOpenSettings,
             )
             is TranslationState.Failed -> Tag(translation.message, color = MaterialTheme.colorScheme.errorContainer)
+            is TranslationState.SameLanguage -> {
+                val language = TARGET_LANGUAGES.find { it.code == translation.targetLanguage }
+                // "Chinese", not "Chinese (Simplified)": the lyrics may be in either script.
+                Tag("Already in ${language?.name?.substringBefore(" (") ?: translation.targetLanguage}")
+            }
             TranslationState.None -> Unit
         }
         if (!lyrics.synced) {

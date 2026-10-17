@@ -3,7 +3,9 @@ package com.dreaminalife.lyricstranslator
 import android.content.Context
 import com.dreaminalife.lyricstranslator.data.cache.JsonFileCache
 import com.dreaminalife.lyricstranslator.data.lyrics.LrcLibProvider
+import com.dreaminalife.lyricstranslator.data.lyrics.LyricsLanguage
 import com.dreaminalife.lyricstranslator.data.lyrics.LyricsRepository
+import com.dreaminalife.lyricstranslator.data.lyrics.MlKitLanguageIdentifier
 import com.dreaminalife.lyricstranslator.data.lyrics.kugou.KugouProvider
 import com.dreaminalife.lyricstranslator.data.lyrics.netease.NetEaseProvider
 import com.dreaminalife.lyricstranslator.data.lyrics.qq.QqMusicProvider
@@ -67,6 +69,7 @@ class AppContainer(context: Context) {
         lyricsProviders,
         JsonFileCache(File(appContext.filesDir, "cache/lyrics"), Lyrics.serializer()),
     )
+    val lyricsLanguage = LyricsLanguage(MlKitLanguageIdentifier()::identify)
     val translationRepository = TranslationRepository(
         JsonFileCache(File(appContext.filesDir, "cache/translations"), TranslatedLyrics.serializer()),
     )

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.dreaminalife.lyricstranslator.AppContainer
+import com.dreaminalife.lyricstranslator.data.lyrics.LyricsLanguage
 import com.dreaminalife.lyricstranslator.data.lyrics.LyricsRepository
 import com.dreaminalife.lyricstranslator.data.settings.SecretStore
 import com.dreaminalife.lyricstranslator.data.settings.SettingsRepository
@@ -43,6 +44,7 @@ class LyricsViewModel(
     private val nowPlayingSource: NowPlayingSource,
     playbackController: PlaybackController,
     private val lyricsRepository: LyricsRepository,
+    private val lyricsLanguage: LyricsLanguage,
     private val translationRepository: TranslationRepository,
     private val translatorFactory: TranslatorFactory,
     private val settingsRepository: SettingsRepository,
@@ -159,6 +161,11 @@ class LyricsViewModel(
             emit(TranslationState.None)
             return@flow
         }
+        if (lyricsLanguage.isIn(content.lyrics, settings.targetLanguage)) {
+            AppLog.i(TAG, "Translation skipped: '${track.title}' is already in ${settings.targetLanguage}")
+            emit(TranslationState.SameLanguage(settings.targetLanguage))
+            return@flow
+        }
         val translator = try {
             translatorFactory.create(settings, apiKey)
         } catch (e: MissingApiKeyException) {
@@ -209,6 +216,7 @@ class LyricsViewModel(
                     nowPlayingSource = container.nowPlayingSource,
                     playbackController = container.playbackController,
                     lyricsRepository = container.lyricsRepository,
+                    lyricsLanguage = container.lyricsLanguage,
                     translationRepository = container.translationRepository,
                     translatorFactory = container.translatorFactory,
                     settingsRepository = container.settingsRepository,

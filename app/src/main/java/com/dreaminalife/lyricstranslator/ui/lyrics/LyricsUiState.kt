@@ -17,6 +17,10 @@ sealed interface TranslationState {
     data object None : TranslationState
     data object Translating : TranslationState
     data object MissingKey : TranslationState
+
+    /** The lyrics are already in [targetLanguage], so nothing was sent to the translator. */
+    data class SameLanguage(val targetLanguage: String) : TranslationState
+
     data class Failed(val message: String) : TranslationState
 
     /** [trackKey] and [source] let the UI ignore a translation of a different track, or of another source's lyrics. */
