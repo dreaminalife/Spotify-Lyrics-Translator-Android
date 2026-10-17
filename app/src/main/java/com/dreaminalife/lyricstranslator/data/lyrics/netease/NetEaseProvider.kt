@@ -1,5 +1,6 @@
 package com.dreaminalife.lyricstranslator.data.lyrics.netease
 
+import com.dreaminalife.lyricstranslator.data.lyrics.ChineseScript
 import com.dreaminalife.lyricstranslator.data.lyrics.LrcParser
 import com.dreaminalife.lyricstranslator.data.lyrics.ProvidedTranslations
 import com.dreaminalife.lyricstranslator.data.lyrics.SongMatcher
@@ -25,18 +26,15 @@ import java.io.IOException
 class NetEaseProvider(private val http: OkHttpClient) : LyricsProvider {
     override val source = LyricsSource.NETEASE
 
+    /**
+     * The catalog spells Chinese titles in Simplified characters, and a Traditional query ("乾杯 Mayday") can miss the
+     * song (干杯) entirely, so a miss is retried with the Simplified title. The original goes first because folding
+     * also rewrites Japanese kanji (夢 to 梦).
+     */
     override suspend fun fetch(track: Track): Lyrics? {
-        val searchUrl = "https://music.163.com/api/cloudsearch/pc".toHttpUrl().newBuilder()
-            .addQueryParameter("s", "${track.title} ${track.artist}")
-            .addQueryParameter("type", "1")
-            .addQueryParameter("limit", "10")
-            .build()
-        val songs = parseSearch(get(searchUrl))
-        val song = pickSong(track, songs)
-        if (song == null) {
-            AppLog.d(TAG, "No match among ${songs.size} results: ${songs.joinToString { "'${it.name}' (${it.dt} ms)" }}")
-            return null
-        }
+        val song = search(track, track.title)
+            ?: ChineseScript.toSimplified(track.title).takeIf { it != track.title }?.let { search(track, it) }
+            ?: return null
         AppLog.d(TAG, "Match id=${song.id} '${song.name}' by '${song.ar.orEmpty().joinToString { it.name.orEmpty() }}' (${song.dt} ms)")
         val lyricUrl = "https://music.163.com/api/song/lyric".toHttpUrl().newBuilder()
             .addQueryParameter("id", song.id.toString())
@@ -44,6 +42,18 @@ class NetEaseProvider(private val http: OkHttpClient) : LyricsProvider {
             .addQueryParameter("tv", "-1")
             .build()
         return parseLyrics(get(lyricUrl))
+    }
+
+    private suspend fun search(track: Track, title: String): NetEaseSong? {
+        val searchUrl = "https://music.163.com/api/cloudsearch/pc".toHttpUrl().newBuilder()
+            .addQueryParameter("s", "$title ${track.artist}")
+            .addQueryParameter("type", "1")
+            .addQueryParameter("limit", "10")
+            .build()
+        val songs = parseSearch(get(searchUrl))
+        return pickSong(track, songs).also {
+            if (it == null) AppLog.d(TAG, "No match for '$title' among ${songs.size} results: ${songs.joinToString { "'${it.name}' (${it.dt} ms)" }}")
+        }
     }
 
     private suspend fun get(url: HttpUrl): String {

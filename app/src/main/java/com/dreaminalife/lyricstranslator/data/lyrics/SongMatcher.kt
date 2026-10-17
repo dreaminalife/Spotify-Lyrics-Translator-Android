@@ -44,5 +44,7 @@ object SongMatcher {
 
     private fun writtenDifferently(a: String, b: String) = a.isNotBlank() && hasLatin(a) != hasLatin(b)
 
-    private fun normalizeTitle(title: String) = ExactArtistMatcher.normalize(title.replace('（', '(').replace('）', ')'))
+    // Traditional and Simplified spellings are the same title (乾杯 and 干杯).
+    private fun normalizeTitle(title: String) =
+        ExactArtistMatcher.normalize(ChineseScript.toSimplified(title).replace('（', '(').replace('）', ')'))
 }

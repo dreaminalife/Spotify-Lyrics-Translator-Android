@@ -2,6 +2,12 @@ package com.dreaminalife.lyricstranslator.data.lyrics.kugou
 
 import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.Track
+import kotlinx.coroutines.test.runTest
+import okhttp3.HttpUrl
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -105,6 +111,58 @@ class KugouProviderTest {
     fun `decodeKrc keeps multi-byte text intact across the key's 16-byte cycle`() {
         val text = "[0,100]" + "夢ならばどれほどよかったでしょう".repeat(20)
         assertEquals(text, KugouProvider.decodeKrc(encodeKrc(text)))
+    }
+
+    @Test
+    fun `song search results match the Traditional title and any of several singers`() {
+        val songs = KugouProvider.parseSongSearch(
+            """{"status":1,"errcode":0,"data":{"info":[
+                {"hash":"a","songname":"干杯 (Life Live)","singername":"五月天","duration":252},
+                {"hash":"b","songname":"干杯","singername":"五月天","duration":289}
+            ]}}""",
+        )
+        assertEquals("b", KugouProvider.pickSong(Track("key", "乾杯", "Mayday", "", 289_000), songs)?.hash)
+
+        val duet = listOf(KugouSong("c", "打上花火", "Daoko、米津玄師", 289))
+        assertEquals("c", KugouProvider.pickSong(Track("key", "打上花火", "米津玄師", "", 289_000), duet)?.hash)
+    }
+
+    @Test(expected = java.io.IOException::class)
+    fun `a failed song search throws`() {
+        KugouProvider.parseSongSearch("""{"status":0,"errcode":20010}""")
+    }
+
+    @Test
+    fun `a missed lyrics search is repeated with the hash from the song search`() = runTest {
+        val urls = mutableListOf<HttpUrl>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                urls += url
+                val body = when {
+                    url.host == "mobileservice.kugou.com" ->
+                        """{"status":1,"errcode":0,"data":{"info":[{"hash":"daa9","songname":"干杯","singername":"五月天","duration":289}]}}"""
+                    url.encodedPath == "/search" && url.queryParameter("hash") == "daa9" ->
+                        """{"candidates":[{"id":"7","accesskey":"k","song":"干杯","singer":"五月天","duration":289000}]}"""
+                    url.encodedPath == "/search" -> """{"candidates":[]}"""
+                    else -> """{"content":"${encodeKrc("[1000,500]<0,500,0>会不会")}"}"""
+                }
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("")
+                    .body(body.toResponseBody())
+                    .build()
+            }
+            .build()
+
+        val lyrics = KugouProvider(client).fetch(Track("key", "乾杯", "Mayday", "Album", 289_000, null))
+
+        assertEquals(listOf("会不会"), lyrics!!.lines.map { it.text })
+        assertEquals("干杯 Mayday", urls[1].queryParameter("keyword"))
+        assertEquals("7", urls[3].queryParameter("id"))
+        assertEquals(4, urls.size)
     }
 
     @Test

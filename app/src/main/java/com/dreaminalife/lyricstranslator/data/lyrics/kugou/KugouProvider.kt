@@ -1,5 +1,6 @@
 package com.dreaminalife.lyricstranslator.data.lyrics.kugou
 
+import com.dreaminalife.lyricstranslator.data.lyrics.ChineseScript
 import com.dreaminalife.lyricstranslator.data.lyrics.ProvidedTranslations
 import com.dreaminalife.lyricstranslator.data.lyrics.SongMatcher
 import com.dreaminalife.lyricstranslator.data.net.AppJson
@@ -16,32 +17,22 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.IOException
 import java.util.Base64
 import java.util.zip.InflaterInputStream
 
 /**
  * Kugou's lyrics server: search by artist, title and duration, then download KRC, Kugou's scrambled word-timed format.
  * KRC is used rather than plain LRC because only KRC carries the Chinese (Simplified) translation.
- * The search knows artists by their native name only, so "Kenshi Yonezu" finds nothing.
+ * The search knows artists by their native name and titles in Simplified Chinese only, so "Mayday - 乾杯" finds
+ * nothing although "五月天 - 干杯" does. On a miss, Kugou's song search, which knows more spellings, supplies the
+ * song's hash, and the lyrics search is repeated with it. That still finds nothing for "Kenshi Yonezu".
  */
 class KugouProvider(private val http: OkHttpClient) : LyricsProvider {
     override val source = LyricsSource.KUGOU
 
     override suspend fun fetch(track: Track): Lyrics? {
-        val searchUrl = "https://krcs.kugou.com/search".toHttpUrl().newBuilder()
-            .addQueryParameter("ver", "1")
-            .addQueryParameter("man", "yes")
-            .addQueryParameter("client", "mobi")
-            .addQueryParameter("keyword", "${track.artist} - ${track.title}")
-            .addQueryParameter("duration", track.durationMs.toString())
-            .addQueryParameter("hash", "")
-            .build()
-        val candidates = AppJson.decodeFromString<SearchResponse>(get(searchUrl)).candidates.orEmpty()
-        val candidate = pickCandidate(track, candidates)
-        if (candidate == null) {
-            AppLog.d(TAG, "No match among ${candidates.size} results: ${candidates.joinToString { "'${it.song}' (${it.duration} ms)" }}")
-            return null
-        }
+        val candidate = searchLyrics(track, hash = "") ?: findSongHash(track)?.let { searchLyrics(track, it) } ?: return null
         AppLog.d(TAG, "Match id=${candidate.id} '${candidate.song}' by '${candidate.singer}' (${candidate.duration} ms)")
         val downloadUrl = "https://krcs.kugou.com/download".toHttpUrl().newBuilder()
             .addQueryParameter("ver", "1")
@@ -57,6 +48,34 @@ class KugouProvider(private val http: OkHttpClient) : LyricsProvider {
             return null
         }
         return parseKrc(decodeKrc(content))
+    }
+
+    private suspend fun searchLyrics(track: Track, hash: String): KugouCandidate? {
+        val searchUrl = "https://krcs.kugou.com/search".toHttpUrl().newBuilder()
+            .addQueryParameter("ver", "1")
+            .addQueryParameter("man", "yes")
+            .addQueryParameter("client", "mobi")
+            .addQueryParameter("keyword", "${track.artist} - ${track.title}")
+            .addQueryParameter("duration", track.durationMs.toString())
+            .addQueryParameter("hash", hash)
+            .build()
+        val candidates = AppJson.decodeFromString<SearchResponse>(get(searchUrl)).candidates.orEmpty()
+        return pickCandidate(track, candidates).also {
+            if (it == null) AppLog.d(TAG, "No match (hash '$hash') among ${candidates.size} results: ${candidates.joinToString { "'${it.song}' (${it.duration} ms)" }}")
+        }
+    }
+
+    private suspend fun findSongHash(track: Track): String? {
+        val searchUrl = "https://mobileservice.kugou.com/api/v3/search/song".toHttpUrl().newBuilder()
+            .addQueryParameter("format", "json")
+            .addQueryParameter("keyword", "${ChineseScript.toSimplified(track.title)} ${track.artist}")
+            .addQueryParameter("page", "1")
+            .addQueryParameter("pagesize", "10")
+            .build()
+        val songs = parseSongSearch(get(searchUrl))
+        return pickSong(track, songs)?.hash.also {
+            if (it == null) AppLog.d(TAG, "No song search match among ${songs.size} results: ${songs.joinToString { "'${it.songname}' (${it.duration} s)" }}")
+        }
     }
 
     private suspend fun get(url: HttpUrl): String {
@@ -77,6 +96,19 @@ class KugouProvider(private val http: OkHttpClient) : LyricsProvider {
 
         fun pickCandidate(track: Track, candidates: List<KugouCandidate>): KugouCandidate? =
             SongMatcher.pick(track, candidates, { it.song.orEmpty() }, { it.duration }, { listOfNotNull(it.singer) })
+
+        /** Any status other than 1 is an error. */
+        fun parseSongSearch(json: String): List<KugouSong> {
+            val dto = AppJson.decodeFromString<SongSearchResponse>(json)
+            if (dto.status != 1) throw IOException("Kugou song search returned status ${dto.status}, errcode ${dto.errcode}")
+            return dto.data?.info.orEmpty()
+        }
+
+        /** Several singers come joined by "、". */
+        fun pickSong(track: Track, songs: List<KugouSong>): KugouSong? =
+            SongMatcher.pick(track, songs, { it.songname.orEmpty() }, { it.duration?.times(1000) }, { song ->
+                song.singername.orEmpty().split('、')
+            })
 
         /** Base64, then a 4-byte "krc1" header, a repeating XOR key and zlib. */
         fun decodeKrc(content: String): String {
@@ -127,6 +159,16 @@ data class KugouCandidate(
 
 @Serializable
 private data class SearchResponse(val candidates: List<KugouCandidate>? = null)
+
+/** [duration] is in seconds. */
+@Serializable
+data class KugouSong(val hash: String, val songname: String? = null, val singername: String? = null, val duration: Long? = null)
+
+@Serializable
+private data class SongSearchResponse(val status: Int? = null, val errcode: Int? = null, val data: SongSearchData? = null)
+
+@Serializable
+private data class SongSearchData(val info: List<KugouSong>? = null)
 
 @Serializable
 private data class DownloadResponse(val content: String? = null)

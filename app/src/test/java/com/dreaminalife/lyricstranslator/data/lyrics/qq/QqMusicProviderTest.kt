@@ -22,20 +22,31 @@ class QqMusicProviderTest {
         """{"code":0,"req_1":{"code":0,"data":{"lyric":"${base64(lyric)}","trans":"${base64(trans)}"}}}"""
 
     @Test(expected = IOException::class)
-    fun `a throttled search throws`() {
-        QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":2001,"data":{}}}""")
+    fun `a refused search throws`() {
+        QqMusicProvider.parseSearch("""{"code":500001,"data":{}}""")
     }
 
     @Test
     fun `the full title decides, so live versions are rejected`() {
         val songs = QqMusicProvider.parseSearch(
-            """{"code":0,"req_1":{"code":0,"data":{"body":{"song":{"list":[
+            """{"code":0,"data":{"song":{"list":[
                 {"id":1,"name":"Lemon","title":"Lemon (Live)","interval":255,"singer":[{"name":"米津玄師","title":"米津玄師"}]},
                 {"id":2,"name":"Lemon","title":"Lemon","interval":256,"singer":[{"name":"米津玄師","title":"米津玄師"}]}
-            ]}}}}}""",
+            ]}}}""",
         )
         val picked = QqMusicProvider.pickSong(Track("key", "Lemon", "Kenshi Yonezu", "", 255_000), songs)
         assertEquals(2L, picked?.id)
+    }
+
+    @Test
+    fun `a Simplified title matches the Traditional one, by the alias in the singer title`() {
+        val songs = QqMusicProvider.parseSearch(
+            """{"code":0,"data":{"song":{"list":[
+                {"id":232577687,"title":"干杯 (Life Live)","interval":252,"singer":[{"name":"五月天","title":"五月天 (Mayday)"}]},
+                {"id":1056382,"title":"干杯","interval":289,"singer":[{"name":"五月天","title":"五月天 (Mayday)"}]}
+            ]}}}""",
+        )
+        assertEquals(1056382L, QqMusicProvider.pickSong(Track("key", "乾杯", "Mayday", "", 289_000), songs)?.id)
     }
 
     @Test
@@ -59,15 +70,16 @@ class QqMusicProviderTest {
     }
 
     @Test
-    fun `fetch posts the desktop identity, then loads the chosen song's lyrics`() = runTest {
+    fun `fetch searches with the web search, then posts the desktop identity for the chosen song's lyrics`() = runTest {
+        val urls = mutableListOf<okhttp3.HttpUrl>()
         val bodies = mutableListOf<String>()
         val client = OkHttpClient.Builder()
             .addInterceptor { chain ->
-                val body = Buffer().also { chain.request().body!!.writeTo(it) }.readUtf8()
-                bodies += body
-                val answer = if (body.contains("DoSearchForQQMusicDesktop")) {
-                    """{"code":0,"req_1":{"code":0,"data":{"body":{"song":{"list":[{"id":42,"title":"Song","interval":200,"singer":[{"name":"Artist"}]}]}}}}}"""
+                urls += chain.request().url
+                val answer = if (chain.request().method == "GET") {
+                    """{"code":0,"data":{"song":{"list":[{"id":42,"title":"Song","interval":200,"singer":[{"name":"Artist"}]}]}}}"""
                 } else {
+                    bodies += Buffer().also { chain.request().body!!.writeTo(it) }.readUtf8()
                     lyricJson("[00:01.00]one")
                 }
                 Response.Builder()
@@ -83,9 +95,13 @@ class QqMusicProviderTest {
         val lyrics = QqMusicProvider(client).fetch(Track("key", "Song", "Artist", "Album", 200_000, null))
 
         assertEquals(listOf("one"), lyrics!!.lines.map { it.text })
-        assertEquals(2, bodies.size)
-        assertTrue(bodies.all { it.contains(""""comm":{"ct":"19"""") })
-        assertTrue(bodies[1], bodies[1].contains(""""songID":42"""))
+        assertEquals(2, urls.size)
+        assertEquals("/soso/fcgi-bin/client_search_cp", urls[0].encodedPath)
+        assertEquals("Song Artist", urls[0].queryParameter("w"))
+        assertEquals("1", urls[0].queryParameter("new_json"))
+        assertEquals(1, bodies.size)
+        assertTrue(bodies[0], bodies[0].contains(""""comm":{"ct":"19""""))
+        assertTrue(bodies[0], bodies[0].contains(""""songID":42"""))
     }
 
     @Test(expected = IOException::class)
@@ -101,15 +117,15 @@ class QqMusicProviderTest {
 
     @Test
     fun `an empty result list and missing fields are handled`() {
-        assertEquals(emptyList<QqSong>(), QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":0,"data":{"body":{"song":{"list":[]}}}}}"""))
-        assertEquals(emptyList<QqSong>(), QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":0,"data":{}}}"""))
-        val songs = QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":0,"data":{"body":{"song":{"list":[{"id":1,"title":"Song"}]}}}}}""")
+        assertEquals(emptyList<QqSong>(), QqMusicProvider.parseSearch("""{"code":0,"data":{"song":{"list":[]}}}"""))
+        assertEquals(emptyList<QqSong>(), QqMusicProvider.parseSearch("""{"code":0,"data":{}}"""))
+        val songs = QqMusicProvider.parseSearch("""{"code":0,"data":{"song":{"list":[{"id":1,"title":"Song"}]}}}""")
         assertNull(QqMusicProvider.pickSong(Track("key", "Song", "Artist", "", 200_000), songs))
     }
 
     @Test(expected = IOException::class)
-    fun `a response without req_1 throws`() {
-        QqMusicProvider.parseSearch("""{"code":500001}""")
+    fun `a response without a code throws`() {
+        QqMusicProvider.parseSearch("""{}""")
     }
 
     @Test

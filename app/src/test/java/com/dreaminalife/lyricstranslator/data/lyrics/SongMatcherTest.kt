@@ -29,6 +29,13 @@ class SongMatcherTest {
     }
 
     @Test
+    fun `Traditional and Simplified Chinese spellings are the same title`() {
+        assertEquals(1, pick(track("乾杯", "Mayday", 289_000), Song(1, "干杯", 289_050, listOf("五月天"))))
+        assertEquals(1, pick(track("後來的我們", "Mayday", 346_000), Song(1, "后来的我们", 346_000, listOf("五月天"))))
+        assertNull(pick(track("乾杯", "Mayday", 289_000), Song(1, "干杯 (Live)", 289_050, listOf("五月天"))))
+    }
+
+    @Test
     fun `versions with another title are rejected`() {
         val track = track("Dynamite", "BTS")
         assertNull(

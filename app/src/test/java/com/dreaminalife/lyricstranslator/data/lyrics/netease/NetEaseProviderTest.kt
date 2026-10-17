@@ -117,6 +117,58 @@ class NetEaseProviderTest {
         assertTrue(urls[1], urls[1].contains("id=42"))
     }
 
+    @Test
+    fun `a miss is searched again with the Simplified title`() = runTest {
+        val queries = mutableListOf<String?>()
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                val body = if (url.encodedPath.endsWith("/cloudsearch/pc")) {
+                    queries += url.queryParameter("s")
+                    if (url.queryParameter("s") == "干杯 Mayday") {
+                        """{"code":200,"result":{"songs":[{"id":22197007,"name":"干杯","dt":289050,"ar":[{"name":"五月天","alia":["Mayday"]}]}]}}"""
+                    } else {
+                        """{"code":200,"result":{"songs":[{"id":3052219,"name":"Pilot","dt":211160,"ar":[{"name":"Mayday"}]}]}}"""
+                    }
+                } else {
+                    """{"code":200,"lrc":{"lyric":"[00:01.00]one"}}"""
+                }
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("")
+                    .body(body.toResponseBody())
+                    .build()
+            }
+            .build()
+
+        val lyrics = NetEaseProvider(client).fetch(Track("key", "乾杯", "Mayday", "Album", 289_000, null))
+
+        assertEquals(listOf("one"), lyrics!!.lines.map { it.text })
+        assertEquals(listOf("乾杯 Mayday", "干杯 Mayday"), queries)
+    }
+
+    @Test
+    fun `a miss is not searched again when the title has nothing to simplify`() = runTest {
+        var searches = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                searches++
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("")
+                    .body("""{"code":200,"result":{"songs":[]}}""".toResponseBody())
+                    .build()
+            }
+            .build()
+
+        assertNull(NetEaseProvider(client).fetch(Track("key", "Lemon", "Kenshi Yonezu", "Album", 255_000, null)))
+        assertEquals(1, searches)
+    }
+
     @Test(expected = java.io.IOException::class)
     fun `a refused search throws`() {
         NetEaseProvider.parseSearch("""{"code":-462,"message":"blocked"}""")
