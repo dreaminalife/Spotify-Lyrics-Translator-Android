@@ -66,13 +66,26 @@ class NetEaseProviderTest {
     }
 
     @Test
-    fun `falls back to search order when no artist matches`() {
+    fun `an artist written in another script is accepted in search order`() {
         val track = Track("key", "Lemon", "Kenshi Yonezu", "", 255_000)
         val songs = listOf(
             song(1, "Lemon", 256_000, NetEaseArtist("米津玄師", listOf("ハチ"))),
             song(2, "Lemon", 255_883, NetEaseArtist("米津玄師", listOf("ハチ"))),
         )
         assertEquals(1L, NetEaseProvider.pickSong(track, songs)?.id)
+    }
+
+    @Test
+    fun `a different artist in the same script is rejected`() {
+        val home = Track("key", "Home", "Artist X", "", 201_000)
+        assertNull(NetEaseProvider.pickSong(home, listOf(song(1, "Home", 201_000, NetEaseArtist("Artist Y")))))
+
+        val lemon = Track("key", "Lemon", "米津玄師", "", 255_000)
+        assertNull(NetEaseProvider.pickSong(lemon, listOf(song(1, "Lemon", 255_000, NetEaseArtist("秋绘")))))
+
+        // A name mixing scripts counts as Latin, so it is not taken for a transliteration of "Kenshi Yonezu".
+        val mixed = Track("key", "Lemon", "Kenshi Yonezu", "", 255_000)
+        assertNull(NetEaseProvider.pickSong(mixed, listOf(song(1, "Lemon", 255_000, NetEaseArtist("安亚尔Anyar")))))
     }
 
     @Test

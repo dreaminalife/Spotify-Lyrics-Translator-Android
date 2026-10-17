@@ -71,4 +71,46 @@ class KugouProviderTest {
         )
         assertEquals("3", KugouProvider.pickCandidate(track, candidates)?.id)
     }
+
+    private fun rawLanguage(json: String) = "[language:${Base64.getEncoder().encodeToString(json.toByteArray())}]"
+
+    @Test
+    fun `no language line, an empty one, or only romanization gives no translation`() {
+        val line = "[0,100]<0,100,0>one"
+        assertNull(KugouProvider.parseKrc(line)!!.translation)
+        assertNull(KugouProvider.parseKrc("[language:]\n$line")!!.translation)
+        assertNull(KugouProvider.parseKrc(rawLanguage("""{"content":[{"type":0,"lyricContent":[["o","ne"]]}]}""") + "\n" + line)!!.translation)
+    }
+
+    @Test
+    fun `empty translation rows become blank lines`() {
+        val krc = listOf(
+            rawLanguage("""{"content":[{"type":1,"lyricContent":[[],["二"]]}]}"""),
+            "[0,100]<0,100,0>one",
+            "[100,100]<0,100,0>two",
+        ).joinToString("\n")
+        assertEquals(listOf("", "二"), KugouProvider.parseKrc(krc)!!.translation!!.lines)
+    }
+
+    @Test
+    fun `a line with only word tags becomes a blank line and keeps its slot`() {
+        val krc = listOf(language(listOf("一", "", "三")), "[0,100]<0,100,0>one", "[100,100]<0,100,0>", "  [200,100]<0,100,0>three  ")
+            .joinToString("\n")
+        val lyrics = KugouProvider.parseKrc(krc)!!
+        assertEquals(listOf("one", "", "three"), lyrics.lines.map { it.text })
+        assertEquals(listOf("一", "", "三"), lyrics.translation!!.lines)
+    }
+
+    @Test
+    fun `decodeKrc keeps multi-byte text intact across the key's 16-byte cycle`() {
+        val text = "[0,100]" + "夢ならばどれほどよかったでしょう".repeat(20)
+        assertEquals(text, KugouProvider.decodeKrc(encodeKrc(text)))
+    }
+
+    @Test
+    fun `candidate without a song name or duration is rejected`() {
+        val track = Track("key", "Song", "Artist", "", 200_000)
+        assertNull(KugouProvider.pickCandidate(track, listOf(KugouCandidate("1", "a", null, "Artist", 200_000))))
+        assertNull(KugouProvider.pickCandidate(track, listOf(KugouCandidate("1", "a", "Song", "Artist", null))))
+    }
 }

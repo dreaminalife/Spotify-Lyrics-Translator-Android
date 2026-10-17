@@ -87,4 +87,43 @@ class QqMusicProviderTest {
         assertTrue(bodies.all { it.contains(""""comm":{"ct":"19"""") })
         assertTrue(bodies[1], bodies[1].contains(""""songID":42"""))
     }
+
+    @Test(expected = IOException::class)
+    fun `a refused lyrics request throws`() {
+        QqMusicProvider.parseLyrics("""{"code":0,"req_1":{"code":2001}}""")
+    }
+
+    @Test
+    fun `missing lyric data gives null`() {
+        assertNull(QqMusicProvider.parseLyrics("""{"code":0,"req_1":{"code":0,"data":{}}}"""))
+        assertNull(QqMusicProvider.parseLyrics("""{"code":0,"req_1":{"code":0}}"""))
+    }
+
+    @Test
+    fun `an empty result list and missing fields are handled`() {
+        assertEquals(emptyList<QqSong>(), QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":0,"data":{"body":{"song":{"list":[]}}}}}"""))
+        assertEquals(emptyList<QqSong>(), QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":0,"data":{}}}"""))
+        val songs = QqMusicProvider.parseSearch("""{"code":0,"req_1":{"code":0,"data":{"body":{"song":{"list":[{"id":1,"title":"Song"}]}}}}}""")
+        assertNull(QqMusicProvider.pickSong(Track("key", "Song", "Artist", "", 200_000), songs))
+    }
+
+    @Test(expected = IOException::class)
+    fun `a response without req_1 throws`() {
+        QqMusicProvider.parseSearch("""{"code":500001}""")
+    }
+
+    @Test
+    fun `singer title (the alias) can match the Spotify artist`() {
+        val songs = listOf(
+            QqSong(1, "Song", 200, listOf(QqSinger("Someone", "Someone"))),
+            QqSong(2, "Song", 200, listOf(QqSinger("아이유", "IU"))),
+        )
+        assertEquals(2L, QqMusicProvider.pickSong(Track("key", "Song", "IU", "", 200_000), songs)?.id)
+    }
+
+    @Test
+    fun `seconds-precision durations still match within 3 s`() {
+        val songs = listOf(QqSong(1, "Song", 203, listOf(QqSinger("Artist"))))
+        assertEquals(1L, QqMusicProvider.pickSong(Track("key", "Song", "Artist", "", 200_400), songs)?.id)
+    }
 }

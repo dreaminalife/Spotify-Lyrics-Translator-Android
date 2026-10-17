@@ -87,4 +87,44 @@ class TranslationRepositoryTest {
         repository.translate(track, changed, translator, "en")
         assertEquals(2, translator.requests.size)
     }
+
+    @Test
+    fun `when the provided translation covers every line only the title is sent`() = runTest {
+        val translator = FakeTranslator()
+        val withTranslation = lyrics.copy(translation = ProvidedTranslation("zh-CN", listOf("甲", "", "乙")))
+        val result = repository().translate(track, withTranslation, translator, "zh-CN")
+
+        assertEquals(listOf(listOf("Title")), translator.requests)
+        assertEquals(listOf("甲", "", "乙"), result.lines)
+        assertEquals("LRCLib + Fake", result.translatorName)
+    }
+
+    @Test
+    fun `a whitespace-only provided line counts as missing`() = runTest {
+        val translator = FakeTranslator()
+        val withTranslation = lyrics.copy(translation = ProvidedTranslation("zh-CN", listOf("甲", "", "  ")))
+        val result = repository().translate(track, withTranslation, translator, "zh-CN")
+
+        assertEquals(listOf(listOf("Title", "b")), translator.requests)
+        assertEquals(listOf("甲", "", "<b>"), result.lines)
+    }
+
+    @Test
+    fun `a provided translation that no longer lines up is ignored`() = runTest {
+        val translator = FakeTranslator()
+        val withTranslation = lyrics.copy(translation = ProvidedTranslation("zh-CN", listOf("甲", "乙")))
+        val result = repository().translate(track, withTranslation, translator, "zh-CN")
+
+        assertEquals(listOf(listOf("Title", "a", "b")), translator.requests)
+        assertEquals("Fake", result.translatorName)
+    }
+
+    @Test
+    fun `a similar but different target language does not use the provided translation`() = runTest {
+        val translator = FakeTranslator()
+        val withTranslation = lyrics.copy(translation = ProvidedTranslation("zh-CN", listOf("甲", "", "乙")))
+        repository().translate(track, withTranslation, translator, "zh-TW")
+
+        assertEquals(listOf(listOf("Title", "a", "b")), translator.requests)
+    }
 }
