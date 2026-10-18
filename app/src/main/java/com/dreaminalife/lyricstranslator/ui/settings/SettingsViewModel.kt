@@ -169,6 +169,8 @@ class SettingsViewModel(
 
     fun setAutoTranslate(enabled: Boolean) = launch { settingsRepository.setOpenRouterAutoTranslate(enabled) }
 
+    fun setSkipLanguages(codes: Set<String>) = launch { settingsRepository.setOpenRouterSkipLanguages(codes) }
+
     fun savePrompt(template: String)= launch { settingsRepository.setPromptTemplate(template) }
 
     fun resetPrompt() = launch { settingsRepository.setPromptTemplate(AppSettings.DEFAULT_PROMPT_TEMPLATE) }

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.dreaminalife.lyricstranslator.domain.model.AppSettings
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsMode
@@ -37,6 +38,7 @@ class SettingsRepository(context: Context) {
             openRouterModel = prefs[MODEL] ?: defaults.openRouterModel,
             promptTemplate = prefs[PROMPT] ?: defaults.promptTemplate,
             openRouterAutoTranslate = prefs[AUTO_TRANSLATE] ?: defaults.openRouterAutoTranslate,
+            openRouterSkipLanguages = prefs[SKIP_LANGUAGES] ?: defaults.openRouterSkipLanguages,
         )
     }.distinctUntilChanged()
 
@@ -129,6 +131,11 @@ class SettingsRepository(context: Context) {
         AppLog.i("Settings", "${AUTO_TRANSLATE.name} = $enabled")
     }
 
+    suspend fun setOpenRouterSkipLanguages(codes: Set<String>) {
+        dataStore.edit { it[SKIP_LANGUAGES] = codes }
+        AppLog.i("Settings", "${SKIP_LANGUAGES.name} = $codes")
+    }
+
     private suspend fun set(key: Preferences.Key<String>, value: String) {
         dataStore.edit { it[key] = value }
         AppLog.i("Settings", "${key.name} = ${if (key == PROMPT) "<${value.length} chars>\n$value" else value}")
@@ -162,6 +169,7 @@ class SettingsRepository(context: Context) {
         val MODEL = stringPreferencesKey("openrouter_model")
         val PROMPT = stringPreferencesKey("prompt_template")
         val AUTO_TRANSLATE = booleanPreferencesKey("openrouter_auto_translate")
+        val SKIP_LANGUAGES = stringSetPreferencesKey("openrouter_skip_languages")
         val SOURCE_ORDER = stringPreferencesKey("lyrics_source_order")
         val PINNED_SOURCE = stringPreferencesKey("pinned_lyrics_source")
         val FLOATING_MODE = stringPreferencesKey("floating_lyrics_mode")

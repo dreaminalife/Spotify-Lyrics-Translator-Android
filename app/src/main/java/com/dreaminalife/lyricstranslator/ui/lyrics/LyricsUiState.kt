@@ -18,7 +18,7 @@ sealed interface TranslationState {
     data object Translating : TranslationState
     data object MissingKey : TranslationState
 
-    /** OpenRouter auto-translate is off and nothing is cached; refreshing the song translates it. */
+    /** OpenRouter auto-translate is off (for every song or the song's language) and nothing is cached; refreshing translates it. */
     data object NotRequested : TranslationState
 
     /** The lyrics are already in [targetLanguage], so nothing was sent to the translator. */

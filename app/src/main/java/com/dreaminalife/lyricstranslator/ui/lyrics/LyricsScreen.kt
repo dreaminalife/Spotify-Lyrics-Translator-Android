@@ -142,6 +142,7 @@ fun LyricsScreen(onOpenSettings: () -> Unit) {
                         onPrevious = viewModel::previous,
                         onPlayPause = viewModel::playPause,
                         onNext = viewModel::next,
+                        onSeek = viewModel::seekTo,
                     )
                 }
             },

@@ -22,15 +22,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -59,6 +62,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -140,6 +144,7 @@ fun SettingsScreen(onBack: () -> Unit, onSpotifyLogin: () -> Unit) {
                         Switch(checked = loaded.openRouterAutoTranslate, onCheckedChange = viewModel::setAutoTranslate)
                     },
                 )
+                SkipLanguagesPicker(loaded.openRouterSkipLanguages, loaded.openRouterAutoTranslate, viewModel::setSkipLanguages)
                 ModelField(loaded.openRouterModel, viewModel)
                 ModelBodyField(loaded.openRouterModel, viewModel)
                 PromptField(loaded.promptTemplate, viewModel)
@@ -315,6 +320,59 @@ private fun TargetLanguagePicker(selected: String, onSelect: (String) -> Unit) {
                         ) {
                             RadioButton(selected = language.code == selected, onClick = null)
                             Text("${language.name} (${language.code})", modifier = Modifier.padding(start = 12.dp))
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
+
+/** Lyrics languages, by base code: Chinese once, as songs in either script are told apart only as "zh". */
+private val SKIPPABLE_LANGUAGES = TARGET_LANGUAGES
+    .distinctBy { it.code.substringBefore('-') }
+    .map { it.copy(code = it.code.substringBefore('-'), name = it.name.substringBefore(" (")) }
+
+/** Does nothing while auto-translate is off ([enabled] false), so it's greyed out then. */
+@Composable
+private fun SkipLanguagesPicker(selected: Set<String>, enabled: Boolean, onChange: (Set<String>) -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val label = SKIPPABLE_LANGUAGES.filter { it.code in selected }.joinToString { it.name }.ifEmpty { "None" }
+    ListItem(
+        headlineContent = { Text("Don't auto-translate these languages") },
+        supportingContent = {
+            Column {
+                Text(label, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    if (enabled) {
+                        "Songs in these languages are translated only when you refresh (⟳) them. Mixed-language songs still are."
+                    } else {
+                        "Only used while Translate every song is on."
+                    }
+                )
+            }
+        },
+        trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+        modifier = Modifier.clickable(enabled = enabled) { open = true }.alpha(if (enabled) 1f else 0.38f),
+    )
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = { TextButton(onClick = { open = false }) { Text("Close") } },
+            title = { Text("Don't auto-translate these languages") },
+            text = {
+                LazyColumn {
+                    items(SKIPPABLE_LANGUAGES) { language ->
+                        val checked = language.code in selected
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(value = checked) { onChange(if (it) selected + language.code else selected - language.code) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = checked, onCheckedChange = null)
+                            Text(language.name, modifier = Modifier.padding(start = 12.dp))
                         }
                     }
                 }

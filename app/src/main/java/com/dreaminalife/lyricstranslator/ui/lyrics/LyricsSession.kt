@@ -192,12 +192,19 @@ class LyricsSession(
             emit(TranslationState.Done(track.key, content.lyrics.source, it))
             return@flow
         }
-        if (settings.translatorType == TranslatorType.OPENROUTER && !settings.openRouterAutoTranslate &&
-            track.key != forcedTrackKey
-        ) {
-            AppLog.i(TAG, "Translation not requested: OpenRouter auto-translate is off for '${track.title}'")
-            emit(TranslationState.NotRequested)
-            return@flow
+        if (settings.translatorType == TranslatorType.OPENROUTER && track.key != forcedTrackKey) {
+            if (!settings.openRouterAutoTranslate) {
+                AppLog.i(TAG, "Translation not requested: OpenRouter auto-translate is off for '${track.title}'")
+                emit(TranslationState.NotRequested)
+                return@flow
+            }
+            // Checked only when the list isn't empty: telling a Latin-script song's language runs ML Kit again.
+            val language = if (settings.openRouterSkipLanguages.isEmpty()) null else lyricsLanguage.of(content.lyrics)
+            if (language != null && language in settings.openRouterSkipLanguages) {
+                AppLog.i(TAG, "Translation not requested: OpenRouter auto-translate is off for $language ('${track.title}')")
+                emit(TranslationState.NotRequested)
+                return@flow
+            }
         }
         emit(TranslationState.Translating)
         val result = try {
