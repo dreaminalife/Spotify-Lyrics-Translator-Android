@@ -26,9 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -56,7 +54,7 @@ import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
 import com.dreaminalife.lyricstranslator.domain.model.Track
 import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsContent
 import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsSession
-import com.dreaminalife.lyricstranslator.ui.lyrics.rememberPlaybackPosition
+import com.dreaminalife.lyricstranslator.ui.lyrics.rememberLineIndex
 
 /** With [LongLines.SHRINK], text gets no smaller than this share of its size before a line is cut with "…". */
 private const val MIN_FIT_SCALE = 0.7f
@@ -162,8 +160,7 @@ private fun CurrentLines(
     settings: FloatingLyricsSettings,
 ) {
     val count = settings.lineCount
-    val position = rememberPlaybackPosition(nowPlaying)
-    val index by remember(lyrics) { derivedStateOf { lyrics.indexAt(position.value) } }
+    val index by rememberLineIndex(lyrics, nowPlaying)
     // Every row has room for a translation when showing several, so the window keeps its height from line to line.
     val keepSecondLines = count > 1 && settings.mode == FloatingLyricsMode.BOTH
     AnimatedContent(
