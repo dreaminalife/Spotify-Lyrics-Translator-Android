@@ -73,6 +73,9 @@ class SettingsViewModel(
     val floatingSettings: StateFlow<FloatingLyricsSettings> = settingsRepository.floatingLyrics
         .stateIn(viewModelScope, SharingStarted.Eagerly, FloatingLyricsSettings())
 
+    val wallpaperColors: StateFlow<Boolean> = settingsRepository.wallpaperColors
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val floatingRunning: StateFlow<Boolean> = floatingLyrics.running
 
     val floatingLocked: StateFlow<Boolean> = floatingLyrics.locked
@@ -108,6 +111,8 @@ class SettingsViewModel(
         launch { settingsRepository.moveSource(source, offset, defaultSourceOrder) }
 
     fun resetSourceOrder() = launch { settingsRepository.resetSourceOrder() }
+
+    fun setWallpaperColors(enabled: Boolean) = launch { settingsRepository.setWallpaperColors(enabled) }
 
     fun startFloating() = floatingLyrics.start()
 

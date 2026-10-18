@@ -41,6 +41,7 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.dreaminalife.lyricstranslator.MainActivity
 import com.dreaminalife.lyricstranslator.R
 import com.dreaminalife.lyricstranslator.appContainer
+import com.dreaminalife.lyricstranslator.domain.model.FloatingStyle
 import com.dreaminalife.lyricstranslator.domain.model.FloatingWindowPlacement
 import com.dreaminalife.lyricstranslator.log.AppLog
 import com.dreaminalife.lyricstranslator.ui.theme.LyricsTranslatorTheme
@@ -201,6 +202,12 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
         val locked by container.floatingLyrics.locked.collectAsStateWithLifecycle()
         val open by panelOpen.collectAsStateWithLifecycle()
         val loaded = settings ?: return
+        // Only followed when shown, so covers aren't analyzed for nothing.
+        val albumColor = if (loaded.style == FloatingStyle.ALBUM) {
+            container.lyricsSession.albumColor.collectAsStateWithLifecycle().value
+        } else {
+            null
+        }
         val onChange: FloatingSettingsChange = { transform ->
             lifecycleScope.launch { container.settingsRepository.updateFloatingLyrics(transform) }
         }
@@ -209,6 +216,7 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
                 FloatingLyrics(
                     container.lyricsSession,
                     loaded,
+                    albumColor,
                     showControls = !locked,
                     onOpenSettings = { panelOpen.update { !it } },
                     onTapLyrics = if (open) ({ panelOpen.value = false }) else null,

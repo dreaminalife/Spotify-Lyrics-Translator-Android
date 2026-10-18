@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsMode
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsSettings
+import com.dreaminalife.lyricstranslator.domain.model.FloatingStyle
 import com.dreaminalife.lyricstranslator.domain.model.LongLines
 import kotlin.math.roundToInt
 
@@ -52,19 +53,40 @@ fun FloatingLyricsOptions(settings: FloatingLyricsSettings, onChange: FloatingSe
             }
         }
         OptionRow("Text size") {
-            Slider(
-                value = settings.textScale,
-                onValueChange = { value ->
-                    // Steps of 0.1, saved only when the step changes.
-                    val scale = (value * 10).roundToInt() / 10f
-                    if (scale != settings.textScale) onChange { it.copy(textScale = scale) }
-                },
-                valueRange = FloatingLyricsSettings.MIN_TEXT_SCALE..FloatingLyricsSettings.MAX_TEXT_SCALE,
-                steps = ((FloatingLyricsSettings.MAX_TEXT_SCALE - FloatingLyricsSettings.MIN_TEXT_SCALE) * 10).roundToInt() - 1,
-                modifier = Modifier.weight(1.5f),
-            )
+            TenthsSlider(
+                settings.textScale,
+                FloatingLyricsSettings.MIN_TEXT_SCALE..FloatingLyricsSettings.MAX_TEXT_SCALE,
+                Modifier.weight(1.5f),
+            ) { scale -> onChange { it.copy(textScale = scale) } }
+        }
+        // Four choices don't fit beside the label in a narrow window, so they get a row of their own.
+        Text("Style", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp))
+        Choice(FloatingStyle.entries, settings.style, label = { it.displayName }, Modifier.fillMaxWidth()) { style ->
+            onChange { it.copy(style = style) }
+        }
+        if (settings.style != FloatingStyle.CLEAR) {
+            OptionRow("Background") {
+                TenthsSlider(settings.backgroundOpacity, FloatingLyricsSettings.MIN_OPACITY..1f, Modifier.weight(1.5f)) { opacity ->
+                    onChange { it.copy(backgroundOpacity = opacity) }
+                }
+            }
         }
     }
+}
+
+/** A slider over [range] in steps of 0.1; [onChange] is called only when the step changes. */
+@Composable
+private fun TenthsSlider(value: Float, range: ClosedFloatingPointRange<Float>, modifier: Modifier, onChange: (Float) -> Unit) {
+    Slider(
+        value = value,
+        onValueChange = { new ->
+            val stepped = (new * 10).roundToInt() / 10f
+            if (stepped != value) onChange(stepped)
+        },
+        valueRange = range,
+        steps = ((range.endInclusive - range.start) * 10).roundToInt() - 1,
+        modifier = modifier,
+    )
 }
 
 /** The panel the floating window opens under itself: [FloatingLyricsOptions], and buttons to lock or close it. */
@@ -103,15 +125,21 @@ private fun OptionRow(label: String, control: @Composable RowScope.() -> Unit) {
 }
 
 @Composable
-private fun <T> Choice(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
-    SingleChoiceSegmentedButtonRow {
+private fun <T> Choice(
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    modifier: Modifier = Modifier,
+    onSelect: (T) -> Unit,
+) {
+    SingleChoiceSegmentedButtonRow(modifier) {
         options.forEachIndexed { index, option ->
             SegmentedButton(
                 selected = option == selected,
                 onClick = { onSelect(option) },
                 shape = SegmentedButtonDefaults.itemShape(index, options.size),
                 icon = {},
-            ) { Text(label(option)) }
+            ) { Text(label(option), maxLines = 1) }
         }
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -47,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsMode
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsSettings
+import com.dreaminalife.lyricstranslator.domain.model.FloatingStyle
 import com.dreaminalife.lyricstranslator.domain.model.LongLines
 import com.dreaminalife.lyricstranslator.domain.model.Lyrics
 import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
@@ -58,6 +61,9 @@ import com.dreaminalife.lyricstranslator.ui.lyrics.rememberPlaybackPosition
 /** With [LongLines.SHRINK], text gets no smaller than this share of its size before a line is cut with "…". */
 private const val MIN_FIT_SCALE = 0.7f
 
+/** Text color of [FloatingStyle.LIGHT]. */
+private val LIGHT_STYLE_TEXT = Color(0xFF1A1A1A)
+
 /**
  * The floating window's lyrics: the line playing now, with the lines around it when showing more than one, and the
  * track while there is no line.
@@ -67,11 +73,13 @@ private const val MIN_FIT_SCALE = 0.7f
  * @param onTapLyrics called for a tap on the lyrics (not on the settings button); null when taps do nothing.
  * @param onDoubleTapLyrics called for a double tap on the lyrics.
  * @param onBounds reports where the lyrics are drawn, so the service can tell a drag on them from a touch elsewhere.
+ * @param albumColor the background for [FloatingStyle.ALBUM]; null without a cover.
  */
 @Composable
 fun FloatingLyrics(
     session: LyricsSession,
     settings: FloatingLyricsSettings,
+    albumColor: Color?,
     showControls: Boolean,
     onOpenSettings: () -> Unit,
     onTapLyrics: (() -> Unit)?,
@@ -85,10 +93,17 @@ fun FloatingLyrics(
     // Right after a track change the lyrics may still be the previous song's; never time them with the new position.
     val content = state.content.takeIf { state.track?.key == track.key } ?: LyricsContent.Loading
     val density = LocalDensity.current
+    val opacity = settings.backgroundOpacity
+    val (background, foreground) = when (settings.style) {
+        FloatingStyle.DARK -> Color.Black.copy(alpha = opacity) to Color.White
+        FloatingStyle.LIGHT -> Color.White.copy(alpha = opacity) to LIGHT_STYLE_TEXT
+        FloatingStyle.ALBUM -> (albumColor ?: Color.Black).copy(alpha = opacity) to Color.White
+        FloatingStyle.CLEAR -> Color.Transparent to Color.White
+    }
     Box(Modifier.onGloballyPositioned { onBounds(it.boundsInRoot()) }) {
         Surface(
-            color = Color.Black.copy(alpha = 0.65f),
-            contentColor = Color.White,
+            color = background,
+            contentColor = foreground,
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth().pointerInput(onTapLyrics, onDoubleTapLyrics) {
                 detectTapGestures(onTap = onTapLyrics?.let { { _ -> it() } }, onDoubleTap = { onDoubleTapLyrics() })
@@ -100,9 +115,9 @@ fun FloatingLyrics(
                 Box(Modifier.padding(horizontal = 28.dp, vertical = 10.dp)) {
                     when (content) {
                         LyricsContent.NothingPlaying, LyricsContent.Loading ->
-                            Rows(listOf(FloatingRow(track.title, "Finding lyrics…")), false, settings.longLines)
+                            Rows(listOf(FloatingRow(track.title, "Finding lyrics…")), false, settings)
                         LyricsContent.NotFound, is LyricsContent.Error ->
-                            Rows(listOf(FloatingRow(track.title, "No lyrics")), false, settings.longLines)
+                            Rows(listOf(FloatingRow(track.title, "No lyrics")), false, settings)
                         is LyricsContent.Loaded ->
                             CurrentLines(track, content.lyrics, state.translationLines, playing, settings)
                     }
@@ -117,20 +132,19 @@ fun FloatingLyrics(
                 Icon(
                     Icons.Default.Settings,
                     contentDescription = "Floating lyrics settings",
-                    tint = Color.White.copy(alpha = 0.6f),
+                    tint = foreground.copy(alpha = 0.6f),
                     modifier = Modifier.size(16.dp),
                 )
             }
-            ResizeHandle(Modifier.align(Alignment.BottomEnd))
+            ResizeHandle(foreground.copy(alpha = 0.6f), Modifier.align(Alignment.BottomEnd))
         }
     }
 }
 
 /** Three diagonal strokes, like a window's resize corner. */
 @Composable
-private fun ResizeHandle(modifier: Modifier) {
+private fun ResizeHandle(color: Color, modifier: Modifier) {
     Canvas(modifier.padding(6.dp).size(14.dp)) {
-        val color = Color.White.copy(alpha = 0.6f)
         val stroke = 1.5.dp.toPx()
         for (i in 1..3) {
             val offset = size.width * i / 3
@@ -162,7 +176,7 @@ private fun CurrentLines(
         },
         label = "floatingLines",
     ) { shownIndex ->
-        Rows(floatingRows(track, lyrics, translations, shownIndex, settings.mode, count), keepSecondLines, settings.longLines)
+        Rows(floatingRows(track, lyrics, translations, shownIndex, settings.mode, count), keepSecondLines, settings)
     }
 }
 
@@ -207,16 +221,20 @@ internal fun floatingRows(
  * @param keepSecondLines leaves room for a second line under every row, even rows without one.
  */
 @Composable
-private fun Rows(rows: List<FloatingRow?>, keepSecondLines: Boolean, longLines: LongLines) {
+private fun Rows(rows: List<FloatingRow?>, keepSecondLines: Boolean, settings: FloatingLyricsSettings) {
     val current = rows.size / 2
+    val color = LocalContentColor.current
+    // Without a background, a shadow keeps the text readable over whatever is underneath.
+    val shadow = settings.style == FloatingStyle.CLEAR
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         rows.forEachIndexed { i, row ->
             val alpha = if (i == current) 1f else 0.45f
             Line(
                 row?.main.orEmpty(),
                 MaterialTheme.typography.titleMedium.copy(fontWeight = if (i == current) FontWeight.Bold else FontWeight.Medium),
-                Color.White.copy(alpha = alpha),
-                longLines,
+                color.copy(alpha = alpha),
+                shadow,
+                settings.longLines,
                 if (i > 0) Modifier.padding(top = 6.dp) else Modifier,
             )
             val second = row?.second
@@ -224,8 +242,9 @@ private fun Rows(rows: List<FloatingRow?>, keepSecondLines: Boolean, longLines: 
                 Line(
                     second.orEmpty(),
                     MaterialTheme.typography.bodyMedium,
-                    Color.White.copy(alpha = alpha * 0.8f),
-                    longLines,
+                    color.copy(alpha = alpha * 0.8f),
+                    shadow,
+                    settings.longLines,
                     Modifier.padding(top = 2.dp),
                 )
             }
@@ -234,11 +253,12 @@ private fun Rows(rows: List<FloatingRow?>, keepSecondLines: Boolean, longLines: 
 }
 
 @Composable
-private fun Line(text: String, style: TextStyle, color: Color, longLines: LongLines, modifier: Modifier) {
+private fun Line(text: String, style: TextStyle, color: Color, shadow: Boolean, longLines: LongLines, modifier: Modifier) {
     val wrap = longLines == LongLines.WRAP
     Text(
         text,
-        style = style,
+        // The shadow fades with the text, so dimmed lines don't leave a dark smudge.
+        style = if (shadow) style.copy(shadow = Shadow(Color.Black.copy(alpha = color.alpha * 0.9f), Offset(0f, 1f), 6f)) else style,
         color = color,
         textAlign = TextAlign.Center,
         // Wrapped lines are never cut, however many lines they take.

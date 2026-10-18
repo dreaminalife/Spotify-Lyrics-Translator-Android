@@ -1,5 +1,7 @@
 package com.dreaminalife.lyricstranslator.ui.lyrics
 
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
 import com.dreaminalife.lyricstranslator.data.lyrics.LyricsLanguage
 import com.dreaminalife.lyricstranslator.data.lyrics.LyricsRepository
 import com.dreaminalife.lyricstranslator.data.playback.NowPlayingUsers
@@ -16,6 +18,7 @@ import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
 import com.dreaminalife.lyricstranslator.domain.model.Track
 import com.dreaminalife.lyricstranslator.domain.model.TranslatorType
 import com.dreaminalife.lyricstranslator.log.AppLog
+import com.dreaminalife.lyricstranslator.ui.theme.albumColor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -48,11 +52,18 @@ class LyricsSession(
     private val translatorFactory: TranslatorFactory,
     private val settingsRepository: SettingsRepository,
     secretStore: SecretStore,
+    artwork: Flow<Bitmap?>,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val users = NowPlayingUsers(nowPlayingSource)
 
     val nowPlaying: StateFlow<NowPlaying?> = nowPlayingSource.nowPlaying
+
+    /** The current cover's color (see [albumColor]), worked out once per cover; null without one. */
+    val albumColor: StateFlow<Color?> = artwork
+        .map { it?.let(::albumColor) }
+        .flowOn(Dispatchers.Default)
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val refreshCount = MutableStateFlow(0)
 

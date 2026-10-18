@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.LyricsTranslator" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Dark: the app opens on the lyrics screen, which is always dark, so the window doesn't flash white first. -->
+    <style name="Theme.LyricsTranslator" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF0E1513</item>
+    </style>
 </resources>

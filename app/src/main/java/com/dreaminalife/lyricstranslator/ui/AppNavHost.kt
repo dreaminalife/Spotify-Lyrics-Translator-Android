@@ -1,10 +1,16 @@
 package com.dreaminalife.lyricstranslator.ui
 
+import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.dreaminalife.lyricstranslator.data.playback.NotificationAccess
 import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsScreen
@@ -25,6 +31,20 @@ fun AppNavHost() {
     val navController = rememberNavController()
     val startDestination = remember {
         if (NotificationAccess.isGranted(context)) Routes.LYRICS else Routes.PERMISSION
+    }
+    // The lyrics screen is always dark, so it needs light system bar icons even in light mode. Set from the route, so
+    // they change as soon as the screen does rather than after its exit animation.
+    val route = navController.currentBackStackEntryAsState().value?.destination?.route ?: startDestination
+    val lightBars = route != Routes.LYRICS && !isSystemInDarkTheme()
+    val window = LocalActivity.current?.window
+    val view = LocalView.current
+    SideEffect {
+        if (window != null) {
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = lightBars
+                isAppearanceLightNavigationBars = lightBars
+            }
+        }
     }
     NavHost(navController = navController, startDestination = startDestination) {
         composable(Routes.PERMISSION) {

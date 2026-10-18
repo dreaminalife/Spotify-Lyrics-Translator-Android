@@ -18,6 +18,21 @@ enum class LongLines(val displayName: String) {
     WRAP("Wrap"),
 }
 
+/** The floating window's background and text colors. */
+enum class FloatingStyle(val displayName: String) {
+    /** White text on black. */
+    DARK("Dark"),
+
+    /** Dark text on white. */
+    LIGHT("Light"),
+
+    /** White text on the color of the song's cover; black without one. */
+    ALBUM("Album"),
+
+    /** White text with a shadow and no background. */
+    CLEAR("Clear"),
+}
+
 /** How the floating window looks. */
 data class FloatingLyricsSettings(
     val mode: FloatingLyricsMode = FloatingLyricsMode.BOTH,
@@ -26,12 +41,16 @@ data class FloatingLyricsSettings(
     val longLines: LongLines = LongLines.SHRINK,
     /** Multiplies every text size; from [MIN_TEXT_SCALE] to [MAX_TEXT_SCALE]. */
     val textScale: Float = 1f,
+    val style: FloatingStyle = FloatingStyle.DARK,
+    /** From [MIN_OPACITY] to 1; not used with [FloatingStyle.CLEAR]. */
+    val backgroundOpacity: Float = 0.7f,
 ) {
     companion object {
         /** Odd, so the line playing now can sit in the middle. */
         val LINE_COUNTS = listOf(1, 3, 5)
         const val MIN_TEXT_SCALE = 0.6f
         const val MAX_TEXT_SCALE = 2f
+        const val MIN_OPACITY = 0.2f
     }
 }
 

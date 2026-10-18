@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.dreaminalife.lyricstranslator.R
@@ -33,7 +34,8 @@ fun MiniPlayerBar(
 ) {
     val position by rememberPlaybackPosition(nowPlaying)
     val duration = nowPlaying.track.durationMs
-    Surface(tonalElevation = 3.dp) {
+    // Transparent, so the lyrics screen's background shows through.
+    Surface(color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.navigationBarsPadding()) {
             LinearProgressIndicator(
                 progress = { if (duration > 0) position.toFloat() / duration else 0f },

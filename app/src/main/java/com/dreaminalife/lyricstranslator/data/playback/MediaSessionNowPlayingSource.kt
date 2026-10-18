@@ -2,6 +2,7 @@ package com.dreaminalife.lyricstranslator.data.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSessionManager
@@ -30,6 +31,12 @@ class MediaSessionNowPlayingSource(private val context: Context) : NowPlayingSou
 
     private val _nowPlaying = MutableStateFlow<NowPlaying?>(null)
     override val nowPlaying: StateFlow<NowPlaying?> = _nowPlaying.asStateFlow()
+
+    private val _artwork = MutableStateFlow<Bitmap?>(null)
+
+    /** The current track's cover as the player sends it, or null when it sends none or nothing is playing. */
+    val artwork: StateFlow<Bitmap?> = _artwork.asStateFlow()
+    private var artworkTrackKey: String? = null
 
     private var controllers: List<MediaController> = emptyList()
     private var current: MediaController? = null
@@ -123,6 +130,23 @@ class MediaSessionNowPlayingSource(private val context: Context) : NowPlayingSou
         val nowPlaying = controller?.let(::toNowPlaying)
         logChanges(controller, nowPlaying)
         _nowPlaying.value = nowPlaying
+        updateArtwork(controller, nowPlaying)
+    }
+
+    /**
+     * Each read of the metadata unpacks a new bitmap, so the artwork is only read again when the track changes, or
+     * while the track has none yet (players can send it after the title).
+     */
+    private fun updateArtwork(controller: MediaController?, nowPlaying: NowPlaying?) {
+        val key = nowPlaying?.track?.key
+        if (key == artworkTrackKey && (key == null || _artwork.value != null)) return
+        artworkTrackKey = key
+        val metadata = controller?.metadata?.takeIf { key != null }
+        _artwork.value = metadata?.let {
+            it.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: it.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: it.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+        }
     }
 
     private fun toNowPlaying(controller: MediaController): NowPlaying? {

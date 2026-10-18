@@ -1,5 +1,7 @@
 package com.dreaminalife.lyricstranslator.ui.lyrics
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -34,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -44,7 +47,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,6 +63,8 @@ import com.dreaminalife.lyricstranslator.domain.model.Lyrics
 import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
 import com.dreaminalife.lyricstranslator.domain.model.NowPlaying
 import com.dreaminalife.lyricstranslator.domain.model.TARGET_LANGUAGES
+import com.dreaminalife.lyricstranslator.ui.theme.AlbumTheme
+import com.dreaminalife.lyricstranslator.ui.theme.NoArtColor
 import kotlinx.coroutines.delay
 
 /** After the user scrolls by hand, auto-scroll waits this long before following the song again (as on desktop). */
@@ -75,67 +83,85 @@ fun LyricsScreen(onOpenSettings: () -> Unit) {
         onPauseOrDispose { }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    val track = state.track
-                    if (track == null) {
-                        Text("Lyrics Translator")
-                    } else {
-                        Column {
-                            Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            val subtitle = listOfNotNull(state.currentTranslation?.translatedTitle, track.artist)
-                                .filter { it.isNotBlank() }
-                                .joinToString(" · ")
-                            Text(
-                                subtitle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+    // The theme switches to the new cover's color at once; only the background fades to it, so the fade just redraws.
+    val albumColor by viewModel.albumColor.collectAsStateWithLifecycle()
+    val color = albumColor ?: NoArtColor
+    val background = animateColorAsState(color, tween(800), label = "albumColor")
+
+    AlbumTheme(color) {
+        Scaffold(
+            modifier = Modifier.drawBehind {
+                val top = background.value
+                drawRect(Brush.verticalGradient(listOf(top, lerp(top, Color.Black, 0.7f))))
+            },
+            // Transparent shows the gradient; the content color must be set, or text without a color would be black.
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                    ),
+                    title = {
+                        val track = state.track
+                        if (track == null) {
+                            Text("Lyrics Translator")
+                        } else {
+                            Column {
+                                Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                val subtitle = listOfNotNull(state.currentTranslation?.translatedTitle, track.artist)
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · ")
+                                Text(
+                                    subtitle,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        if (state.track != null) {
+                            IconButton(onClick = viewModel::refresh) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Reload lyrics and translation")
+                            }
+                        }
+                        IconButton(onClick = onOpenSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+            },
+            bottomBar = {
+                nowPlaying?.let {
+                    MiniPlayerBar(
+                        nowPlaying = it,
+                        onPrevious = viewModel::previous,
+                        onPlayPause = viewModel::playPause,
+                        onNext = viewModel::next,
+                    )
+                }
+            },
+        ) { padding ->
+            Column(Modifier.fillMaxSize().padding(padding)) {
+                StatusRow(state, onOpenSettings, onSelectSource = viewModel::selectSource)
+                Box(Modifier.fillMaxWidth().weight(1f)) {
+                    when (val content = state.content) {
+                        LyricsContent.NothingPlaying -> Message("Play a song in Spotify and its lyrics will show up here.")
+                        LyricsContent.Loading -> Loading()
+                        LyricsContent.NotFound -> Message("No lyrics found for this song.", onRetry = viewModel::refresh)
+                        is LyricsContent.Error -> Message(content.message, onRetry = viewModel::refresh)
+                        is LyricsContent.Loaded -> key(state.track?.key) {
+                            LyricsList(
+                                lyrics = content.lyrics,
+                                translations = state.translationLines,
+                                nowPlaying = nowPlaying,
+                                onSeek = viewModel::seekTo,
                             )
                         }
-                    }
-                },
-                actions = {
-                    if (state.track != null) {
-                        IconButton(onClick = viewModel::refresh) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Reload lyrics and translation")
-                        }
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                },
-            )
-        },
-        bottomBar = {
-            nowPlaying?.let {
-                MiniPlayerBar(
-                    nowPlaying = it,
-                    onPrevious = viewModel::previous,
-                    onPlayPause = viewModel::playPause,
-                    onNext = viewModel::next,
-                )
-            }
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            StatusRow(state, onOpenSettings, onSelectSource = viewModel::selectSource)
-            Box(Modifier.fillMaxWidth().weight(1f)) {
-                when (val content = state.content) {
-                    LyricsContent.NothingPlaying -> Message("Play a song in Spotify and its lyrics will show up here.")
-                    LyricsContent.Loading -> Loading()
-                    LyricsContent.NotFound -> Message("No lyrics found for this song.", onRetry = viewModel::refresh)
-                    is LyricsContent.Error -> Message(content.message, onRetry = viewModel::refresh)
-                    is LyricsContent.Loaded -> key(state.track?.key) {
-                        LyricsList(
-                            lyrics = content.lyrics,
-                            translations = state.translationLines,
-                            nowPlaying = nowPlaying,
-                            onSeek = viewModel::seekTo,
-                        )
                     }
                 }
             }

@@ -85,6 +85,7 @@ class AppContainer(context: Context) {
         translatorFactory = translatorFactory,
         settingsRepository = settingsRepository,
         secretStore = secretStore,
+        artwork = mediaSessions.artwork,
     )
     val floatingLyrics = FloatingLyricsController(appContext)
 }

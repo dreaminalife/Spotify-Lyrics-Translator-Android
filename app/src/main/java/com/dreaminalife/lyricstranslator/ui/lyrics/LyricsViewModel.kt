@@ -1,5 +1,6 @@
 package com.dreaminalife.lyricstranslator.ui.lyrics
 
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -19,6 +20,8 @@ class LyricsViewModel(
     val nowPlaying: StateFlow<NowPlaying?> = session.nowPlaying
 
     val uiState: StateFlow<LyricsUiState> = session.uiState
+
+    val albumColor: StateFlow<Color?> = session.albumColor
 
     init {
         AppLog.d(TAG, "Created")

@@ -11,6 +11,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.dreaminalife.lyricstranslator.domain.model.AppSettings
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsMode
 import com.dreaminalife.lyricstranslator.domain.model.FloatingLyricsSettings
+import com.dreaminalife.lyricstranslator.domain.model.FloatingStyle
 import com.dreaminalife.lyricstranslator.domain.model.FloatingWindowPlacement
 import com.dreaminalife.lyricstranslator.domain.model.LongLines
 import com.dreaminalife.lyricstranslator.domain.model.LyricsSource
@@ -59,9 +60,19 @@ class SettingsRepository(context: Context) {
             prefs[FLOATING_LINES] = settings.lineCount
             prefs[FLOATING_LONG_LINES] = settings.longLines.name
             prefs[FLOATING_TEXT_SCALE] = settings.textScale
+            prefs[FLOATING_STYLE] = settings.style.name
+            prefs[FLOATING_OPACITY] = settings.backgroundOpacity
             updated = settings
         }
         AppLog.i("Settings", "Floating lyrics: $updated")
+    }
+
+    /** Whether screens other than the lyrics take their colors from the wallpaper (Android 12+). */
+    val wallpaperColors: Flow<Boolean> = dataStore.data.map { it[WALLPAPER_COLORS] ?: false }.distinctUntilChanged()
+
+    suspend fun setWallpaperColors(enabled: Boolean) {
+        dataStore.edit { it[WALLPAPER_COLORS] = enabled }
+        AppLog.i("Settings", "Wallpaper colors = $enabled")
     }
 
     /** Where the floating window was last moved or resized to; null until it has been. */
@@ -138,6 +149,10 @@ class SettingsRepository(context: Context) {
             textScale = this[FLOATING_TEXT_SCALE]
                 ?.coerceIn(FloatingLyricsSettings.MIN_TEXT_SCALE, FloatingLyricsSettings.MAX_TEXT_SCALE)
                 ?: defaults.textScale,
+            style = this[FLOATING_STYLE]?.let { name -> FloatingStyle.entries.firstOrNull { it.name == name } }
+                ?: defaults.style,
+            backgroundOpacity = this[FLOATING_OPACITY]?.coerceIn(FloatingLyricsSettings.MIN_OPACITY, 1f)
+                ?: defaults.backgroundOpacity,
         )
     }
 
@@ -153,6 +168,9 @@ class SettingsRepository(context: Context) {
         val FLOATING_LINES = intPreferencesKey("floating_lyrics_lines")
         val FLOATING_LONG_LINES = stringPreferencesKey("floating_lyrics_long_lines")
         val FLOATING_TEXT_SCALE = floatPreferencesKey("floating_lyrics_text_scale")
+        val FLOATING_STYLE = stringPreferencesKey("floating_lyrics_style")
+        val FLOATING_OPACITY = floatPreferencesKey("floating_lyrics_opacity")
+        val WALLPAPER_COLORS = booleanPreferencesKey("wallpaper_colors")
         val FLOATING_X = intPreferencesKey("floating_lyrics_x")
         val FLOATING_Y = intPreferencesKey("floating_lyrics_y")
         val FLOATING_WIDTH = intPreferencesKey("floating_lyrics_width")

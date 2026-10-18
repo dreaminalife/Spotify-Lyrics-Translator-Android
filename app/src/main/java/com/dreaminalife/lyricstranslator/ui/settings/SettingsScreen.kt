@@ -145,6 +145,20 @@ fun SettingsScreen(onBack: () -> Unit, onSpotifyLogin: () -> Unit) {
                 PromptField(loaded.promptTemplate, viewModel)
             }
 
+            // Wallpaper colors need Android 12.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                HorizontalDivider()
+                SectionTitle("Appearance")
+                val wallpaperColors by viewModel.wallpaperColors.collectAsStateWithLifecycle()
+                ListItem(
+                    headlineContent = { Text("Use wallpaper colors") },
+                    supportingContent = {
+                        Text("Takes the colors of these screens from your wallpaper. The lyrics screen always uses the colors of the song's cover.")
+                    },
+                    trailingContent = { Switch(checked = wallpaperColors, onCheckedChange = viewModel::setWallpaperColors) },
+                )
+            }
+
             HorizontalDivider()
             FloatingLyricsSection(viewModel)
 
