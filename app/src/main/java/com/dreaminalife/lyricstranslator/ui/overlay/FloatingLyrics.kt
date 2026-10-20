@@ -1,17 +1,11 @@
 package com.dreaminalife.lyricstranslator.ui.overlay
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -38,12 +32,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -56,6 +53,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -65,10 +63,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -84,6 +82,9 @@ import com.dreaminalife.lyricstranslator.domain.model.Track
 import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsContent
 import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsSession
 import com.dreaminalife.lyricstranslator.ui.lyrics.rememberLineIndex
+import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /** With [LongLines.SHRINK], text gets no smaller than this share of its size before a line is cut with "…". */
@@ -92,8 +93,14 @@ private const val MIN_FIT_SCALE = 0.7f
 /** How long the playback row takes to open or close. */
 private const val PLAYBACK_REVEAL_MS = 300
 
-/** At least as long as the lines take to slide and fade, so the old ones are gone before the window shrinks. */
+/** How long the lines take to scroll to the next one. */
 private const val LINE_SCROLL_MS = 400
+
+/** Alpha of the lines around the one playing now. */
+private const val DIM_ALPHA = 0.45f
+
+/** Space between one row and the next. */
+private val ROW_GAP = 6.dp
 
 /** Text color of [FloatingStyle.LIGHT]. */
 private val LIGHT_STYLE_TEXT = Color(0xFF1A1A1A)
@@ -168,9 +175,9 @@ fun FloatingLyrics(
                     Box(Modifier.padding(horizontal = 28.dp, vertical = 10.dp)) {
                         when (content) {
                             LyricsContent.NothingPlaying, LyricsContent.Loading ->
-                                Rows(listOf(FloatingRow(track.title, "Finding lyrics…")), false, settings)
+                                LyricRow(FloatingRow(track.title, "Finding lyrics…"), true, 1f, false, settings)
                             LyricsContent.NotFound, is LyricsContent.Error ->
-                                Rows(listOf(FloatingRow(track.title, "No lyrics")), false, settings)
+                                LyricRow(FloatingRow(track.title, "No lyrics"), true, 1f, false, settings)
                             is LyricsContent.Loaded ->
                                 CurrentLines(track, content.lyrics, state.translationLines, playing, settings)
                         }
@@ -282,28 +289,67 @@ private fun CurrentLines(
 ) {
     val count = settings.lineCount
     val index by rememberLineIndex(lyrics, nowPlaying)
+    if (!lyrics.synced) {
+        LyricRow(floatingRows(track, lyrics, translations, index, settings.mode, count).single(), true, 1f, false, settings)
+        return
+    }
+    val half = count / 2
     // Every row has room for a translation when showing several, so the window keeps its height from line to line.
     val keepSecondLines = count > 1 && settings.mode == FloatingLyricsMode.BOTH
-    AnimatedContent(
-        targetState = index,
-        transitionSpec = {
-            // Old and new content each move by one row, so the lines they share stay in place and the rest scroll.
-            val direction = if (targetState >= initialState) 1 else -1
-            (slideInVertically { it * direction / count } + fadeIn()) togetherWith
-                (slideOutVertically { -it * direction / count } + fadeOut()) using SizeTransform(clip = true) { initial, target ->
-                    // Wrapped lines change the height. The window is as tall as its content, and resizing it every frame
-                    // makes it flicker: it takes the taller height at once and keeps it until the old lines are gone.
-                    val tallest = IntSize(target.width, maxOf(initial.height, target.height))
-                    keyframes {
-                        durationMillis = LINE_SCROLL_MS
-                        tallest at 0
-                        tallest at LINE_SCROLL_MS - 1
-                    }
+    // The line in the middle, in lines: between two while scrolling.
+    val position = remember(lyrics) { Animatable(index.toFloat()) }
+    // The lines scrolled between; the rows around both stay laid out until the scroll ends.
+    var first by remember(lyrics) { mutableIntStateOf(index) }
+    var last by remember(lyrics) { mutableIntStateOf(index) }
+    LaunchedEffect(lyrics, index) {
+        val from = position.value
+        // A seek far away jumps rather than scrolling through every line in between.
+        if (abs(index - from) <= count) {
+            first = minOf(floor(from).toInt(), index)
+            last = maxOf(ceil(from).toInt(), index)
+            position.animateTo(index.toFloat(), tween(LINE_SCROLL_MS, easing = FastOutSlowInEasing))
+        }
+        first = index
+        last = index
+        position.snapTo(index.toFloat())
+    }
+    val firstLine = first
+    val lastLine = last
+    // One copy of the lines, moved as a whole: cross-fading an old and a new copy leaves a ghost of each line wherever
+    // the two don't line up exactly.
+    Layout(
+        content = {
+            for (line in firstLine - half..lastLine + half) {
+                key(line) {
+                    val alpha by animateFloatAsState(if (line == index) 1f else DIM_ALPHA, tween(LINE_SCROLL_MS), label = "lineAlpha")
+                    LyricRow(floatingRow(track, lyrics, translations, line, settings.mode), line == index, alpha, keepSecondLines, settings)
                 }
+            }
         },
-        label = "floatingLines",
-    ) { shownIndex ->
-        Rows(floatingRows(track, lyrics, translations, shownIndex, settings.mode, count), keepSecondLines, settings)
+        modifier = Modifier.fillMaxWidth().clipToBounds(),
+    ) { measurables, constraints ->
+        val rows = measurables.map { it.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)) }
+        val gap = ROW_GAP.roundToPx()
+        // Where each row starts, and one more where a row after the last would.
+        val tops = IntArray(rows.size + 1)
+        rows.forEachIndexed { k, row -> tops[k + 1] = tops[k] + row.height + gap }
+        // Row k is line firstLine - half + k, so the rows around a line start at row (line - firstLine).
+        fun startRow(line: Int) = (line - firstLine).coerceIn(0, rows.size - count)
+        fun heightAround(line: Int) = tops[startRow(line) + count] - gap - tops[startRow(line)]
+        // Wrapped lines change the height. The window is as tall as its content, and resizing it every frame makes it
+        // flicker: it takes the taller height at once and keeps it until the scroll ends.
+        val height = maxOf(heightAround(firstLine), heightAround(lastLine)).coerceIn(constraints.minHeight, constraints.maxHeight)
+        layout(constraints.maxWidth, height) {
+            // Read only here, so scrolling moves the rows without recomposing or measuring them.
+            val p = position.value
+            val start = startRow(floor(p).toInt())
+            val scroll = tops[start] + (tops[start + 1] - tops[start]) * (p - (firstLine + start))
+            rows.forEachIndexed { k, row ->
+                // Rows fade out as they leave the window and in as they enter it.
+                val outside = abs(firstLine - half + k - p) - half
+                row.placeWithLayer(0, (tops[k] - scroll).roundToInt()) { alpha = (1 - outside).coerceIn(0f, 1f) }
+            }
+        }
     }
 }
 
@@ -325,56 +371,54 @@ internal fun floatingRows(
     // Checked first: indexAt is also -1 for lyrics that aren't synced.
     if (!lyrics.synced) return listOf(FloatingRow(track.title, "Not time-synced"))
     val half = count / 2
-    return (index - half..index + half).map { i ->
-        when {
-            i == -1 -> FloatingRow(track.title, track.artist.ifBlank { null })
-            i !in lyrics.lines.indices -> null
-            else -> {
-                val original = lyrics.lines[i].text.ifBlank { "♪" }
-                val translation = translations?.getOrNull(i)?.takeIf { it.isNotBlank() }
-                when (mode) {
-                    FloatingLyricsMode.BOTH -> FloatingRow(original, translation)
-                    // No translation (yet, or the song is already in the target language): the original beats an empty row.
-                    FloatingLyricsMode.TRANSLATION_ONLY -> FloatingRow(translation ?: original, null)
-                }
+    return (index - half..index + half).map { floatingRow(track, lyrics, translations, it, mode) }
+}
+
+/** The row for line [index] of synced [lyrics]: the track for -1, null past either end. */
+internal fun floatingRow(track: Track, lyrics: Lyrics, translations: List<String>?, index: Int, mode: FloatingLyricsMode): FloatingRow? =
+    when {
+        index == -1 -> FloatingRow(track.title, track.artist.ifBlank { null })
+        index !in lyrics.lines.indices -> null
+        else -> {
+            val original = lyrics.lines[index].text.ifBlank { "♪" }
+            val translation = translations?.getOrNull(index)?.takeIf { it.isNotBlank() }
+            when (mode) {
+                FloatingLyricsMode.BOTH -> FloatingRow(original, translation)
+                // No translation (yet, or the song is already in the target language): the original beats an empty row.
+                FloatingLyricsMode.TRANSLATION_ONLY -> FloatingRow(translation ?: original, null)
             }
         }
     }
-}
 
 /**
- * [rows] top to bottom, the middle one highlighted.
+ * One [row], drawn empty when null; bold when [current].
  *
- * @param keepSecondLines leaves room for a second line under every row, even rows without one.
+ * @param keepSecondLines leaves room for a second line under the row, even without one.
  */
 @Composable
-private fun Rows(rows: List<FloatingRow?>, keepSecondLines: Boolean, settings: FloatingLyricsSettings) {
-    val current = rows.size / 2
+private fun LyricRow(row: FloatingRow?, current: Boolean, alpha: Float, keepSecondLines: Boolean, settings: FloatingLyricsSettings) {
     val color = LocalContentColor.current
     // Without a background, a shadow keeps the text readable over whatever is underneath.
     val shadow = settings.style == FloatingStyle.CLEAR
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        rows.forEachIndexed { i, row ->
-            val alpha = if (i == current) 1f else 0.45f
+        Line(
+            row?.main.orEmpty(),
+            MaterialTheme.typography.titleMedium.copy(fontWeight = if (current) FontWeight.Bold else FontWeight.Medium),
+            color.copy(alpha = alpha),
+            shadow,
+            settings.longLines,
+            Modifier,
+        )
+        val second = row?.second
+        if (second != null || keepSecondLines) {
             Line(
-                row?.main.orEmpty(),
-                MaterialTheme.typography.titleMedium.copy(fontWeight = if (i == current) FontWeight.Bold else FontWeight.Medium),
-                color.copy(alpha = alpha),
+                second.orEmpty(),
+                MaterialTheme.typography.bodyMedium,
+                color.copy(alpha = alpha * 0.8f),
                 shadow,
                 settings.longLines,
-                if (i > 0) Modifier.padding(top = 6.dp) else Modifier,
+                Modifier.padding(top = 2.dp),
             )
-            val second = row?.second
-            if (second != null || keepSecondLines) {
-                Line(
-                    second.orEmpty(),
-                    MaterialTheme.typography.bodyMedium,
-                    color.copy(alpha = alpha * 0.8f),
-                    shadow,
-                    settings.longLines,
-                    Modifier.padding(top = 2.dp),
-                )
-            }
         }
     }
 }
