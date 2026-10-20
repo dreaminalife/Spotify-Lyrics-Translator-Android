@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
@@ -67,6 +68,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -89,6 +91,9 @@ private const val MIN_FIT_SCALE = 0.7f
 
 /** How long the playback row takes to open or close. */
 private const val PLAYBACK_REVEAL_MS = 300
+
+/** At least as long as the lines take to slide and fade, so the old ones are gone before the window shrinks. */
+private const val LINE_SCROLL_MS = 400
 
 /** Text color of [FloatingStyle.LIGHT]. */
 private val LIGHT_STYLE_TEXT = Color(0xFF1A1A1A)
@@ -285,7 +290,16 @@ private fun CurrentLines(
             // Old and new content each move by one row, so the lines they share stay in place and the rest scroll.
             val direction = if (targetState >= initialState) 1 else -1
             (slideInVertically { it * direction / count } + fadeIn()) togetherWith
-                (slideOutVertically { -it * direction / count } + fadeOut()) using SizeTransform(clip = true)
+                (slideOutVertically { -it * direction / count } + fadeOut()) using SizeTransform(clip = true) { initial, target ->
+                    // Wrapped lines change the height. The window is as tall as its content, and resizing it every frame
+                    // makes it flicker: it takes the taller height at once and keeps it until the old lines are gone.
+                    val tallest = IntSize(target.width, maxOf(initial.height, target.height))
+                    keyframes {
+                        durationMillis = LINE_SCROLL_MS
+                        tallest at 0
+                        tallest at LINE_SCROLL_MS - 1
+                    }
+                }
         },
         label = "floatingLines",
     ) { shownIndex ->
