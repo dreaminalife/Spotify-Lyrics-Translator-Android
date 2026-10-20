@@ -21,8 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Follows the active media sessions (needs notification access). Prefers a session that is playing,
- * then Spotify. Pause, seek and track changes arrive as session callbacks, so nothing is polled.
+ * Follows Spotify's media session (needs notification access); other players are ignored.
+ * Pause, seek and track changes arrive as session callbacks, so nothing is polled.
  */
 class MediaSessionNowPlayingSource(private val context: Context) : NowPlayingSource, PlaybackController {
     private val sessionManager = context.getSystemService(MediaSessionManager::class.java)
@@ -115,17 +115,15 @@ class MediaSessionNowPlayingSource(private val context: Context) : NowPlayingSou
 
     private fun setControllers(newControllers: List<MediaController>) {
         controllers.forEach { it.unregisterCallback(controllerCallback) }
-        controllers = newControllers
+        controllers = newControllers.filter { it.packageName == SPOTIFY_PACKAGE }
         controllers.forEach { it.registerCallback(controllerCallback, mainHandler) }
         AppLog.d(TAG, "Active sessions: " + controllers.joinToString { "${it.packageName}(${stateName(it.playbackState?.state)})" }.ifEmpty { "none" })
         publish()
     }
 
     private fun publish() {
-        val controller = controllers.sortedWith(
-            compareByDescending<MediaController> { it.playbackState?.state == PlaybackState.STATE_PLAYING }
-                .thenByDescending { it.packageName == SPOTIFY_PACKAGE }
-        ).firstOrNull()
+        val controller = controllers.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?: controllers.firstOrNull()
         current = controller
         val nowPlaying = controller?.let(::toNowPlaying)
         logChanges(controller, nowPlaying)

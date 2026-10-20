@@ -1,11 +1,11 @@
 # Lyrics Translator
 
-An Android app that shows synced lyrics for the song you're playing in Spotify (or any other music player) and translates them line by line into your language.
+An Android app that shows synced lyrics for the song you're playing in Spotify and translates them line by line into your language.
 
 ## Features
 
-### Follows whatever you're playing
-- Reads the current track from the system's media sessions, so there's nothing to link up or sign in to. It prefers the player that's actually playing, then Spotify.
+### Follows what you're playing in Spotify
+- Reads the current track from Spotify's media session, so there's nothing to link up or sign in to. Other players (YouTube, browsers, etc.) are ignored.
 - Pause, seek and track changes come in as session events, so nothing is polled.
 - Built-in mini player with previous / play-pause / next and a seek bar. Tap any synced line to jump to it.
 
