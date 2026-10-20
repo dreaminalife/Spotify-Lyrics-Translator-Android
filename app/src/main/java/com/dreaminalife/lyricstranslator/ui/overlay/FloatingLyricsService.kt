@@ -60,7 +60,8 @@ import kotlin.math.hypot
 
 /**
  * Shows [FloatingLyrics] over other apps, where it was last left. Drag it to move it, or its corner to resize it;
- * its settings button opens [FloatingSettingsPanel] under it. Locked, touches pass through it.
+ * its settings button opens [FloatingSettingsPanel] under it, and a tap on the lyrics shows playback buttons. Locked,
+ * touches pass through it.
  *
  * It shows only while a player has a track (playing or paused), the screen is on and this app isn't open, so nothing
  * is looked up or translated from a pocket. Unlocked, a double tap on the lyrics opens this app.
@@ -95,6 +96,9 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
     private var lyricsBounds = Rect.Zero
 
     private val panelOpen = MutableStateFlow(false)
+
+    /** Whether a tap on the lyrics brought up the playback buttons; closed like the settings panel. */
+    private val playbackOpen = MutableStateFlow(false)
 
     private val interactive = MutableStateFlow(true)
     private val screenReceiver = object : BroadcastReceiver() {
@@ -178,7 +182,7 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
         container.floatingLyrics.onStarted()
         lifecycleScope.launch {
             container.floatingLyrics.locked.collect { locked ->
-                if (locked) panelOpen.value = false
+                if (locked) closePopups()
                 applyLock(locked)
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(locked))
             }
@@ -187,7 +191,7 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
         lifecycleScope.launch {
             shown.collect {
                 AppLog.d(TAG, if (it) "Lyrics shown" else "Lyrics hidden")
-                if (!it) panelOpen.value = false
+                if (!it) closePopups()
                 // The window itself is hidden: one whose content shrinks to nothing can keep showing its last frame.
                 view?.visibility = if (it) View.VISIBLE else View.GONE
             }
@@ -201,6 +205,7 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
         val settings by container.settingsRepository.floatingLyrics.collectAsStateWithLifecycle(null)
         val locked by container.floatingLyrics.locked.collectAsStateWithLifecycle()
         val open by panelOpen.collectAsStateWithLifecycle()
+        val playbackShown by playbackOpen.collectAsStateWithLifecycle()
         val loaded = settings ?: return
         // Only followed when shown, so covers aren't analyzed for nothing.
         val albumColor = if (loaded.style == FloatingStyle.ALBUM) {
@@ -218,8 +223,10 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
                     loaded,
                     albumColor,
                     showControls = !locked,
+                    container.playbackController,
+                    showPlayback = playbackShown,
                     onOpenSettings = { panelOpen.update { !it } },
-                    onTapLyrics = if (open) ({ panelOpen.value = false }) else null,
+                    onTapLyrics = { if (open) panelOpen.value = false else playbackOpen.update { !it } },
                     // Allowed from the background: this app may draw over others and its window is showing.
                     onDoubleTapLyrics = { startActivity(MainActivity.launchIntent(this@FloatingLyricsService)) },
                     onBounds = {
@@ -268,6 +275,11 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
         view = null
         container.floatingLyrics.onStopped()
         super.onDestroy()
+    }
+
+    private fun closePopups() {
+        panelOpen.value = false
+        playbackOpen.value = false
     }
 
     private fun applyLock(locked: Boolean) {
@@ -418,7 +430,7 @@ class FloatingLyricsService : LifecycleService(), SavedStateRegistryOwner {
                     placedY = params.y
                     windowManager.updateViewLayout(this, params)
                 }
-                MotionEvent.ACTION_OUTSIDE -> panelOpen.value = false
+                MotionEvent.ACTION_OUTSIDE -> closePopups()
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (gesture == Gesture.MOVE || gesture == Gesture.RESIZE) savePlacement()
                     gesture = Gesture.NONE
