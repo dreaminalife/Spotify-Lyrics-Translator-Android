@@ -2,10 +2,13 @@ package com.dreaminalife.lyricstranslator
 
 import android.content.Context
 import com.dreaminalife.lyricstranslator.data.cache.JsonFileCache
+import com.dreaminalife.lyricstranslator.data.lyrics.ITunesCatalog
 import com.dreaminalife.lyricstranslator.data.lyrics.LrcLibProvider
 import com.dreaminalife.lyricstranslator.data.lyrics.LyricsLanguage
 import com.dreaminalife.lyricstranslator.data.lyrics.LyricsRepository
 import com.dreaminalife.lyricstranslator.data.lyrics.MlKitLanguageIdentifier
+import com.dreaminalife.lyricstranslator.data.lyrics.NativeNameLookup
+import com.dreaminalife.lyricstranslator.data.lyrics.NativeNames
 import com.dreaminalife.lyricstranslator.data.lyrics.kugou.KugouProvider
 import com.dreaminalife.lyricstranslator.data.lyrics.netease.NetEaseProvider
 import com.dreaminalife.lyricstranslator.data.lyrics.qq.QqMusicProvider
@@ -30,6 +33,7 @@ import com.dreaminalife.lyricstranslator.domain.model.Lyrics
 import com.dreaminalife.lyricstranslator.ui.lyrics.LyricsSession
 import com.dreaminalife.lyricstranslator.ui.overlay.FloatingLyricsController
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.builtins.serializer
 import java.io.File
 
 /** Creates and holds the app's singletons. */
@@ -70,6 +74,11 @@ class AppContainer(context: Context) {
     val lyricsRepository = LyricsRepository(
         lyricsProviders,
         JsonFileCache(File(appContext.filesDir, "cache/lyrics"), Lyrics.serializer()),
+        NativeNameLookup(
+            ITunesCatalog(http)::nativeNames,
+            JsonFileCache(File(appContext.filesDir, "cache/native_names"), NativeNames.serializer()),
+            JsonFileCache(File(appContext.filesDir, "cache/japanese_artists"), Boolean.serializer()),
+        ),
     )
     val lyricsLanguage = LyricsLanguage(MlKitLanguageIdentifier()::identify)
     val translationRepository = TranslationRepository(

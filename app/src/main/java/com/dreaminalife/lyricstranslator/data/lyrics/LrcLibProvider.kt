@@ -21,20 +21,32 @@ import kotlin.math.roundToLong
 class LrcLibProvider(private val http: OkHttpClient) : LyricsProvider {
     override val source = LyricsSource.LRCLIB
 
+    /**
+     * A sent album must equal the entry's, and uploaders file songs under all sorts of albums ("Ado Videos"), so a
+     * miss is retried without it. Without an album, title, artist and duration (±2 s) still have to match.
+     */
     override suspend fun fetch(track: Track): Lyrics? {
-        val url = "https://lrclib.net/api/get".toHttpUrl().newBuilder()
-            .addQueryParameter("track_name", track.title)
-            .addQueryParameter("artist_name", track.artist)
-            .addQueryParameter("album_name", track.album)
-            .addQueryParameter("duration", (track.durationMs / 1000.0).roundToLong().coerceAtLeast(0).toString())
-            .build()
-        val response = sendWithRetry(Request.Builder().url(url).build())
+        var response = get(track, track.album.takeIf { it.isNotBlank() })
+        if (response.code == 404 && track.album.isNotBlank()) {
+            AppLog.d(TAG, "No match (404) with album_name='${track.album}'; retrying without the album")
+            response = get(track, album = null)
+        }
         if (response.code == 404) {
-            AppLog.d(TAG, "No match (404) for track_name='${track.title}' artist_name='${track.artist}' album_name='${track.album}'")
+            AppLog.d(TAG, "No match (404) for track_name='${track.title}' artist_name='${track.artist}'")
             return null
         }
         if (!response.isSuccessful) throw HttpException(response.code, "LRCLib returned HTTP ${response.code}")
         return parseResponse(response.body)
+    }
+
+    private suspend fun get(track: Track, album: String?): HttpResponse {
+        val url = "https://lrclib.net/api/get".toHttpUrl().newBuilder()
+            .addQueryParameter("track_name", track.title)
+            .addQueryParameter("artist_name", track.artist)
+            .apply { if (album != null) addQueryParameter("album_name", album) }
+            .addQueryParameter("duration", (track.durationMs / 1000.0).roundToLong().coerceAtLeast(0).toString())
+            .build()
+        return sendWithRetry(Request.Builder().url(url).build())
     }
 
     /** LRCLib sometimes answers 503 and succeeds moments later, so network errors and 5xx are retried. */

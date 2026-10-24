@@ -17,9 +17,12 @@ class LrcLibProviderTest {
     private val track = Track("key", "Song", "Artist", "Album", 200_000, null)
     private val body = """{"id":1,"syncedLyrics":"[00:01.00]one\n[00:02.00]two"}"""
 
+    private val albums = mutableListOf<String?>()
+
     /** A client that answers the n-th request with codes[n] (the last code repeats). */
     private fun client(vararg codes: Int, calls: AtomicInteger) = OkHttpClient.Builder()
         .addInterceptor { chain ->
+            albums += chain.request().url.queryParameter("album_name")
             val code = codes[minOf(calls.getAndIncrement(), codes.lastIndex)]
             Response.Builder()
                 .request(chain.request())
@@ -48,9 +51,23 @@ class LrcLibProviderTest {
     }
 
     @Test
-    fun doesNotRetry404() = runTest {
+    fun retries404OnceWithoutTheAlbum() = runTest {
         val calls = AtomicInteger()
         assertNull(LrcLibProvider(client(404, calls = calls)).fetch(track))
-        assertEquals(1, calls.get())
+        assertEquals(listOf("Album", null), albums)
+    }
+
+    @Test
+    fun findsTheSongWithoutTheAlbum() = runTest {
+        val calls = AtomicInteger()
+        val lyrics = LrcLibProvider(client(404, 200, calls = calls)).fetch(track)
+        assertEquals(listOf("one", "two"), lyrics!!.lines.map { it.text })
+    }
+
+    @Test
+    fun noAlbumIsSentOnce() = runTest {
+        val calls = AtomicInteger()
+        assertNull(LrcLibProvider(client(404, calls = calls)).fetch(track.copy(album = "")))
+        assertEquals(listOf<String?>(null), albums)
     }
 }
