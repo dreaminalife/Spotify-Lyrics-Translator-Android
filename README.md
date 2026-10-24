@@ -23,6 +23,9 @@ An Android app that shows synced lyrics for the song you're playing in Spotify a
 - You can reorder the sources in Settings, or tap the source tag on the lyrics screen to always try that one first.
 - On the Chinese services, a search result has to match both the title and the duration (within 3 seconds), which filters out live versions, remixes and covers. A result whose artist also matches is preferred, and artists listed under their native name (米津玄師 for "Kenshi Yonezu") are still accepted.
 - Traditional Chinese titles are converted to Simplified so they match the Chinese services' listings.
+- Spotify lists many Japanese songs under English or romanized names ("Usseewa" by Ado), while the other services know them only as うっせぇわ. When a source misses, the app looks up the song's native names in Apple's iTunes catalog, and that source searches again with them. Every source after it tries the native names first, then Spotify's. Each track is looked up once, and only when a source misses.
+- Western artists, whom the Japan store spells in katakana (テイラー・スウィフト), keep their usual names. An artist with an all-katakana Japanese name (ヨルシカ) is searched that way once the app has found Japanese lyrics by them.
+- On LRCLib, a search that misses with Spotify's album is retried without it, since songs there are often filed under a different album.
 
 ### Translation
 - **Google Translate** is the default, free option with no setup.
